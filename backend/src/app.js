@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth.routes');
 const usersRoutes = require('./routes/users.routes');
+const papersRoutes = require('./routes/papers.routes');
 
 const app = express();
 
@@ -34,6 +35,7 @@ const authLimiter = rateLimit({
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/papers', papersRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
