@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  super_admin
+  admin
+  invigilator
+}
+
+model User {
+  id              String    @id @default(uuid())
+  name            String
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  role            Role
+  isActive        Boolean   @default(true) @map("is_active")
+  failedAttempts  Int       @default(0) @map("failed_attempts")
+  lockedUntil     DateTime? @map("locked_until")
+  refreshToken    String?   @map("refresh_token")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  papersUploaded     Paper[]           @relation("UploadedBy")
+  downloads          Download[]
+  auditLogs          AuditLog[]
+  permissionsGranted PaperPermission[] @relation("GrantedBy")
+  permissionsHeld    PaperPermission[] @relation("HeldBy")
+  anomalies          Anomaly[]
+  resolvedAnomalies  Anomaly[]         @relation("ResolvedBy")
+
+  @@map("users")
+}
+
+model Paper {
+  id                String    @id @default(uuid())
+  title             String
+  subject           String
+  examDate          DateTime  @map("exam_date")
+  uploadedBy        String    @map("uploaded_by")
+  encryptedFilePath String    @map("encrypted_file_path")
+  encryptedAesKey   String    @map("encrypted_aes_key")
+  aesIv             String    @map("aes_iv")
+  fileHash          String    @map("file_hash")
+  isReleased        Boolean   @default(false) @map("is_released")
+  releaseAt         DateTime? @map("release_at")
+  isDeleted         Boolean   @default(false) @map("is_deleted")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  uploader    User              @relation("UploadedBy", fields: [uploadedBy], references: [id])
+  downloads   Download[]
+  permissions PaperPermission[]
+  anomalies   Anomaly[]
+
+  @@map("papers")
+}
+
+model Download {
+  id            String   @id @default(uuid())
+  paperId       String   @map("paper_id")
+  userId        String   @map("user_id")
+  downloadToken String   @unique @map("download_token") @default(uuid())
+  downloadedAt  DateTime @default(now()) @map("downloaded_at")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+
+  paper Paper @relation(fields: [paperId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@map("downloads")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  eventType    String   @map("event_type")
+  userId       String?  @map("user_id")
+  paperId      String?  @map("paper_id")
+  metadata     Json?
+  previousHash String   @map("previous_hash")
+  currentHash  String   @map("current_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model PaperPermission {
+  id        String    @id @default(uuid())
+  paperId   String    @map("paper_id")
+  userId    String    @map("user_id")
+  grantedBy String    @map("granted_by")
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  revokedAt DateTime? @map("revoked_at")
+  isActive  Boolean   @default(true) @map("is_active")
+
+  paper   Paper @relation(fields: [paperId], references: [id])
+  user    User  @relation("HeldBy", fields: [userId], references: [id])
+  granter User  @relation("GrantedBy", fields: [grantedBy], references: [id])
+
+  @@unique([paperId, userId])
+  @@map("paper_permissions")
+}
+
+model Anomaly {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  paperId    String    @map("paper_id")
+  riskScore  Int       @map("risk_score")
+  reasons    Json
+  resolved   Boolean   @default(false)
+  resolvedBy String?   @map("resolved_by")
+  resolvedAt DateTime? @map("resolved_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user     User  @relation(fields: [userId], references: [id])
+  paper    Paper @relation(fields: [paperId], references: [id])
+  resolver User? @relation("ResolvedBy", fields: [resolvedBy], references: [id])
+
+  @@map("anomalies")
+}
