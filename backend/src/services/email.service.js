@@ -8,6 +8,9 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 async function sendEmail(to, subject, htmlBody) {
@@ -45,5 +48,25 @@ async function sendPaperReleaseNotification(invigilatorEmail, invigilatorName, p
   `;
   return sendEmail(invigilatorEmail, subject, html);
 }
+async function sendAnomalyAlert(adminEmail, userName, paperTitle, riskScore, reasons) {
+  const subject = `🚨 SECURITY ALERT: Anomaly Detected (Risk Score: ${riskScore})`;
+  const reasonList = reasons.map(r => `<li>${r}</li>`).join('');
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #dc2626;">Security Anomaly Detected</h2>
+      <p>An unusual access pattern has been detected in the Exam Security System.</p>
+      <div style="background: #fef2f2; border: 1px solid #fca5a5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <strong>User:</strong> ${userName}<br/>
+        <strong>Paper:</strong> ${paperTitle}<br/>
+        <strong>Risk Score:</strong> <span style="color: #dc2626; font-size: 18px;">${riskScore}</span><br/>
+        <strong>Triggered at:</strong> ${new Date().toLocaleString()}
+      </div>
+      <h3>Reasons Flagged:</h3>
+      <ul>${reasonList}</ul>
+      <p>Please log in to the system to investigate and resolve this alert.</p>
+    </div>
+  `;
+  return sendEmail(adminEmail, subject, html);
+}
 
-module.exports = { sendEmail, sendPaperReleaseNotification };
+module.exports = { sendEmail, sendPaperReleaseNotification, sendAnomalyAlert };

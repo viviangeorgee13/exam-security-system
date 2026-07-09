@@ -5,6 +5,7 @@ const { prisma, logAuditEvent } = require('../services/audit.service');
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/role.middleware');
 const { watermarkPDF } = require('../services/watermark.service');
+const { runAnomalyCheck } = require('../services/anomaly.service');
 
 // GET /api/papers/:id/download — Invigilator only, post-release
 router.get('/:id/download', authenticate, requireRole('invigilator'), async (req, res) => {
@@ -16,20 +17,14 @@ router.get('/:id/download', authenticate, requireRole('invigilator'), async (req
     const paper = await prisma.paper.findFirst({
       where: { id, isDeleted: false },
     });
-
     if (!paper) {
       return res.status(404).json({ error: 'Paper not found' });
     }
 
     // 2. Check invigilator has permission for this paper
     const permission = await prisma.paperPermission.findFirst({
-      where: {
-        paperId: id,
-        userId,
-        isActive: true,
-      },
+      where: { paperId: id, userId, isActive: true },
     });
-
     if (!permission) {
       await logAuditEvent('PAPER_ACCESSED', userId, id, {
         action: 'DOWNLOAD_DENIED',
@@ -91,14 +86,18 @@ router.get('/:id/download', authenticate, requireRole('invigilator'), async (req
       paperTitle: paper.title,
     });
 
-    // 9. Serve the watermarked PDF
+    // 9. Run anomaly check in background (don't await — don't slow down the download)
+    runAnomalyCheck(userId, id, req.ip).catch(err =>
+      console.error('[ANOMALY] Background check failed:', err.message)
+    );
+
+    // 10. Serve the watermarked PDF
     const filename = `exam_${paper.subject.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', watermarkedPDF.length);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.setHeader('Pragma', 'no-cache');
-
     res.send(watermarkedPDF);
 
   } catch (err) {
