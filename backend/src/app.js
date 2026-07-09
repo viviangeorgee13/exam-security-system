@@ -8,6 +8,8 @@ const authRoutes = require('./routes/auth.routes');
 const usersRoutes = require('./routes/users.routes');
 const papersRoutes = require('./routes/papers.routes');
 const scheduleRoutes = require('./routes/schedule.routes');
+const downloadRoutes = require('./routes/download.routes');
+const permissionsRoutes = require('./routes/permissions.routes');
 const { startScheduler } = require('./services/scheduler.service');
 
 const app = express();
@@ -39,6 +41,8 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/papers', papersRoutes);
 app.use('/api/papers', scheduleRoutes);
+app.use('/api/papers', downloadRoutes);
+app.use('/api/papers', permissionsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
