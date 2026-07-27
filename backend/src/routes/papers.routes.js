@@ -13,13 +13,11 @@ const {
 
 const router = express.Router();
 
-// Multer setup — store file in memory temporarily
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Server-side validation — only allow PDF
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
     } else {
@@ -43,16 +41,10 @@ router.post('/upload', authenticate, isAdmin, upload.single('file'), async (req,
 
     const paperId = uuidv4();
 
-    // Encrypt the file
     const { encrypted, aesKey, iv, fileHash } = encryptPaper(req.file.buffer);
-
-    // Encrypt the AES key with master key
     const { encryptedAesKey, masterIv, ivHex } = encryptAesKey(aesKey, iv);
-
-    // Save encrypted file to disk
     const filePath = saveEncryptedFile(encrypted, paperId);
 
-    // Store metadata in database
     const paper = await prisma.paper.create({
       data: {
         id: paperId,
@@ -114,6 +106,47 @@ router.get('/', authenticate, isAdmin, async (req, res) => {
     res.json(papers);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch papers' });
+  }
+});
+
+// GET /api/papers/assigned — MUST be before /:id route
+router.get('/assigned', authenticate, async (req, res) => {
+  try {
+    const permissions = await prisma.paperPermission.findMany({
+      where: {
+        userId: req.user.id,
+        isActive: true,
+      },
+      include: {
+        paper: {
+          select: {
+            id: true,
+            title: true,
+            subject: true,
+            examDate: true,
+            isReleased: true,
+            releaseAt: true,
+            isDeleted: true,
+          },
+        },
+      },
+    });
+
+    const papers = permissions
+      .filter(p => !p.paper.isDeleted)
+      .map(p => ({
+        ...p.paper,
+        status: p.paper.isReleased ? 'released' :
+                p.paper.releaseAt ? 'locked' : 'no_schedule',
+        secondsUntilRelease: p.paper.releaseAt
+          ? Math.max(0, Math.floor((new Date(p.paper.releaseAt) - new Date()) / 1000))
+          : null,
+      }));
+
+    res.json(papers);
+  } catch (err) {
+    console.error('[ASSIGNED] Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch assigned papers' });
   }
 });
 

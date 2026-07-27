@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { prisma, logAuditEvent } = require('../services/audit.service');
 const { authenticate } = require('../middleware/auth.middleware');
-const { isSuperAdmin } = require('../middleware/role.middleware');
+const { isSuperAdmin, isAdmin } = require('../middleware/role.middleware');
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
@@ -26,6 +26,20 @@ router.get('/', authenticate, isSuperAdmin, async (req, res) => {
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// GET /api/users/invigilators — get all invigilators (Admin can access)
+router.get('/invigilators', authenticate, isAdmin, async (req, res) => {
+  try {
+    const invigilators = await prisma.user.findMany({
+      where: { role: 'invigilator', isActive: true },
+      select: { id: true, name: true, email: true, role: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(invigilators);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch invigilators' });
   }
 });
 
