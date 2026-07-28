@@ -14,6 +14,7 @@ const anomaliesRoutes = require('./routes/anomalies.routes');
 const { startScheduler } = require('./services/scheduler.service');
 const auditRoutes = require('./routes/audit.routes');
 const aiRoutes = require('./routes/ai.routes');
+const downloadsRoutes = require('./routes/downloads.routes');
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use('/api/papers', permissionsRoutes);
 app.use('/api/anomalies', anomaliesRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/downloads', downloadsRoutes);
 
 
 app.get('/api/health', (req, res) => {

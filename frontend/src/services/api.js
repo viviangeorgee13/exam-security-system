@@ -66,3 +66,6 @@ export const verifyHashChain = () => API.get('/audit/verify');
 export const getAnomalies = () => API.get('/anomalies');
 export const resolveAnomaly = (id) => API.patch(`/anomalies/${id}/resolve`);
 export const getAnomalyStats = () => API.get('/anomalies/stats');
+export const getDownloads = () => API.get('/downloads');
+export const getMyDownloads = () => API.get('/downloads/my');
+export const verifyDownloadToken = (token) => API.get(`/downloads/verify/${token}`);
