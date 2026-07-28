@@ -1,3 +1,4 @@
+import AIAssistant from './AIAssistant';
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -50,7 +51,8 @@ export default function Layout({ children, navItems, title, subtitle }) {
 
   const roleColor = getRoleColor(user.role);
 
-  return (
+return (
+     <>
     <div className="min-h-screen flex" style={{ background: '#F5F7FB', fontFamily: 'Inter, system-ui, sans-serif' }}>
       <Toaster position="top-right" richColors />
 
@@ -284,5 +286,7 @@ export default function Layout({ children, navItems, title, subtitle }) {
         </motion.div>
       </div>
     </div>
+    <AIAssistant user={user} />
+    </>
   );
 }

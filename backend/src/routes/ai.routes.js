@@ -505,18 +505,19 @@ router.post('/query', authenticate, async (req, res) => {
     const { systemPrompt, userPrompt, authorized } = buildPrompt(question, fetchedData, user);
 
     // Call Claude API with simple single message
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'llama-3.1-8b-instant',
         max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
       }),
     });
 
@@ -529,14 +530,13 @@ router.post('/query', authenticate, async (req, res) => {
         status: 'failed',
         role: user.role,
         authorized,
-        model: 'claude-haiku-4-5-20251001',
+        model: 'llama-3.1-8b-instant',
       });
       return res.status(500).json({ error: 'AI service unavailable. Please try again.' });
     }
 
     const data = await response.json();
-    const answer = data.content?.[0]?.text || 'I could not generate a response. Please try again.';
-
+    const answer = data.choices?.[0]?.message?.content || 'I could not generate a response. Please try again.';
     // Log to audit trail
     await logAuditEvent('AI_QUERY', user.id, null, {
       question: question.slice(0, 200),
@@ -548,7 +548,7 @@ router.post('/query', authenticate, async (req, res) => {
       responseTimeMs: Date.now() - startTime,
     });
 
-    res.json({ answer, intent });
+    res.json({ answer, intent, model: 'Llama 3.1 8B' });
   } catch (err) {
     console.error('[AI] Error:', err.message);
     res.status(500).json({ error: 'AI service error. Please try again.' });
