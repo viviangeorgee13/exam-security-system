@@ -5,11 +5,12 @@ import {
   LayoutDashboard, Users, ClipboardList, AlertTriangle,
   UserPlus, ShieldAlert, CheckCircle2, Activity,
   Search, Download, Upload, Unlock, Lock,
-  ArrowRight, TrendingUp, Eye, RefreshCw
+  ArrowRight, Eye, RefreshCw
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import AuditLogTable from '../components/AuditLogTable';
 import AnomalyCard from '../components/AnomalyCard';
+import HashVerificationModal from '../components/HashVerificationModal';
 import {
   getUsers, createUser, toggleUserActive,
   getAuditLogs, verifyHashChain,
@@ -119,6 +120,7 @@ function getEventLabel(eventType) {
     ADMIN_ACTION: 'Admin action',
     USER_LOGIN: 'User logged in',
     USER_LOGOUT: 'User logged out',
+    AI_QUERY: 'AI Assistant queried',
   };
   return labels[eventType] || eventType;
 }
@@ -146,6 +148,7 @@ export default function SuperAdminDashboard() {
   const [anomalies, setAnomalies] = useState([]);
   const [stats, setStats] = useState(null);
   const [hashResult, setHashResult] = useState(null);
+  const [showHashModal, setShowHashModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'invigilator' });
@@ -198,17 +201,20 @@ export default function SuperAdminDashboard() {
     } catch (e) { toast.error('Failed to update user status'); }
   };
 
-  const handleVerifyChain = async () => {
-    setLoading(true);
+  const handleVerifyChain = () => {
+    setShowHashModal(true);
+  };
+
+  const performVerification = async () => {
     try {
       const res = await verifyHashChain();
       setHashResult(res.data);
-      if (res.data.valid) toast.success('Hash chain verified — all entries intact!');
-      else toast.error('Hash chain broken — tampering detected!');
-    } catch (e) {} finally { setLoading(false); }
+      return res.data;
+    } catch (e) {
+      return { valid: false, message: 'Verification failed' };
+    }
   };
 
-  // Derived data
   const recentActivity = auditLogs.slice(0, 8);
   const filteredUsers = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -229,12 +235,21 @@ export default function SuperAdminDashboard() {
     <Layout navItems={navItems}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
+      {/* Hash Verification Modal */}
+      <AnimatePresence>
+        {showHashModal && (
+          <HashVerificationModal
+            onVerify={performVerification}
+            onClose={() => setShowHashModal(false)}
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence mode="wait">
 
         {/* ── Dashboard ─────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
           <motion.div key="dashboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-
             <div style={{ marginBottom: '24px' }}>
               <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>System Overview</h2>
               <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
@@ -242,7 +257,6 @@ export default function SuperAdminDashboard() {
               </p>
             </div>
 
-            {/* Stat Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
               <StatCard icon={<Users size={20} style={{ color: '#2563EB' }} />} label="Total Users" value={users.length} bg="#DBEAFE" sublabel={`${activeUsers} active`} />
               <StatCard icon={<AlertTriangle size={20} style={{ color: '#F59E0B' }} />} label="Open Anomalies" value={stats?.unresolved ?? '—'} bg="#FEF3C7" sublabel="Needs review" />
@@ -250,9 +264,7 @@ export default function SuperAdminDashboard() {
               <StatCard icon={<CheckCircle2 size={20} style={{ color: '#22C55E' }} />} label="Resolved" value={stats?.resolved ?? '—'} bg="#DCFCE7" sublabel="All time" />
             </div>
 
-            {/* Main grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-
               {/* Recent Activity */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -275,11 +287,7 @@ export default function SuperAdminDashboard() {
                 ) : recentActivity.map((log, i) => {
                   const ev = getEventIcon(log.eventType);
                   return (
-                    <motion.div
-                      key={log.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.04 }}
+                    <motion.div key={log.id} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
                       style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < recentActivity.length - 1 ? '1px solid #F9FAFB' : 'none' }}
                     >
                       <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: ev.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ev.color, flexShrink: 0 }}>
@@ -295,17 +303,13 @@ export default function SuperAdminDashboard() {
                     </motion.div>
                   );
                 })}
-                <button
-                  onClick={() => setActiveTab('audit')}
-                  style={{ marginTop: '12px', fontSize: '12px', color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
+                <button onClick={() => setActiveTab('audit')} style={{ marginTop: '12px', fontSize: '12px', color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
                   View all logs <ArrowRight size={12} />
                 </button>
               </Card>
 
               {/* User Breakdown + Quick Actions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* User Breakdown */}
                 <Card>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -319,9 +323,9 @@ export default function SuperAdminDashboard() {
                     </button>
                   </div>
                   {[
-                    { label: 'Administrators', value: adminCount, total: users.length, color: '#2563EB', bg: '#DBEAFE' },
-                    { label: 'Invigilators', value: invigilatorCount, total: users.length, color: '#16A34A', bg: '#DCFCE7' },
-                    { label: 'Active Accounts', value: activeUsers, total: users.length, color: '#7C3AED', bg: '#EDE9FE' },
+                    { label: 'Administrators', value: adminCount, total: users.length, color: '#2563EB' },
+                    { label: 'Invigilators', value: invigilatorCount, total: users.length, color: '#16A34A' },
+                    { label: 'Active Accounts', value: activeUsers, total: users.length, color: '#7C3AED' },
                   ].map((item, i) => (
                     <div key={i} style={{ marginBottom: i < 2 ? '14px' : 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -340,19 +344,15 @@ export default function SuperAdminDashboard() {
                   ))}
                 </Card>
 
-                {/* Quick Actions */}
                 <Card>
                   <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '12px' }}>Quick Actions</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { label: 'Create New User', desc: 'Add admin or invigilator', icon: <UserPlus size={16} />, bg: '#EFF6FF', color: '#2563EB', tab: 'users' },
-                      { label: 'View Anomalies', desc: `${stats?.unresolved ?? 0} unresolved alerts`, icon: <AlertTriangle size={16} />, bg: stats?.unresolved > 0 ? '#FEF2F2' : '#F3F4F6', color: stats?.unresolved > 0 ? '#EF4444' : '#6B7280', tab: 'anomalies' },
+                      { label: 'Create New User', desc: 'Add admin or invigilator', icon: <UserPlus size={16} />, bg: '#EFF6FF', color: '#2563EB', action: () => setActiveTab('users') },
+                      { label: 'View Anomalies', desc: `${stats?.unresolved ?? 0} unresolved alerts`, icon: <AlertTriangle size={16} />, bg: stats?.unresolved > 0 ? '#FEF2F2' : '#F3F4F6', color: stats?.unresolved > 0 ? '#EF4444' : '#6B7280', action: () => setActiveTab('anomalies') },
                       { label: 'Verify Hash Chain', desc: 'Check audit log integrity', icon: <ShieldAlert size={16} />, bg: '#F0FDF4', color: '#16A34A', action: handleVerifyChain },
                     ].map((action, i) => (
-                      <motion.button
-                        key={i}
-                        onClick={action.tab ? () => setActiveTab(action.tab) : action.action}
-                        whileHover={{ x: 4 }}
+                      <motion.button key={i} onClick={action.action} whileHover={{ x: 4 }}
                         style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #F3F4F6', background: '#FAFAFA', cursor: 'pointer', textAlign: 'left', transition: 'all 200ms ease' }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = action.color; e.currentTarget.style.background = action.bg; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#F3F4F6'; e.currentTarget.style.background = '#FAFAFA'; }}
@@ -372,13 +372,9 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            {/* Hash Result Banner */}
             <AnimatePresence>
-              {hashResult && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
+              {hashResult && !showHashModal && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                   style={{ padding: '14px 18px', borderRadius: '12px', marginBottom: '16px', background: hashResult.valid ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${hashResult.valid ? '#BBF7D0' : '#FECACA'}`, color: hashResult.valid ? '#166534' : '#991B1B', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
                   {hashResult.valid ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
@@ -397,8 +393,6 @@ export default function SuperAdminDashboard() {
               <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Create and manage all system users</p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '24px' }}>
-
-              {/* Create User */}
               <Card>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
                   <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -425,7 +419,6 @@ export default function SuperAdminDashboard() {
                 </form>
               </Card>
 
-              {/* Users List */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -439,13 +432,9 @@ export default function SuperAdminDashboard() {
                     <input placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: '180px', paddingLeft: '30px', height: '36px' }} onFocus={focusInput} onBlur={blurInput} />
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '500px', overflowY: 'auto' }}>
                   {filteredUsers.map((u, i) => (
-                    <motion.div
-                      key={u.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.04 }}
+                    <motion.div key={u.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: '12px', border: '1px solid #F3F4F6', background: u.isActive ? '#FAFAFA' : '#FEF9F9' }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -464,10 +453,7 @@ export default function SuperAdminDashboard() {
                         </div>
                       </div>
                       {u.role !== 'super_admin' && (
-                        <motion.button
-                          onClick={() => handleToggleActive(u.id)}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+                        <motion.button onClick={() => handleToggleActive(u.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                           style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', border: 'none', background: u.isActive ? '#FEE2E2' : '#DCFCE7', color: u.isActive ? '#EF4444' : '#16A34A', transition: 'all 200ms ease' }}
                         >
                           {u.isActive ? 'Deactivate' : 'Activate'}
@@ -484,46 +470,13 @@ export default function SuperAdminDashboard() {
         {/* ── Audit ─────────────────────────────────────────────── */}
         {activeTab === 'audit' && (
           <motion.div key="audit" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-              <div>
-                <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Audit Logs</h2>
-                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
-                  Tamper-proof hash-chained event log — {auditLogs.length} entries
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <GradientButton onClick={fetchAuditLogs} variant="secondary">
-                  <RefreshCw size={14} /> Refresh
-                </GradientButton>
-                <GradientButton onClick={handleVerifyChain} disabled={loading} loading={loading}>
-                  {!loading && <ShieldAlert size={14} />}
-                  {loading ? 'Verifying...' : 'Verify Hash Chain'}
-                </GradientButton>
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {hashResult && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  style={{ padding: '14px 18px', borderRadius: '12px', marginBottom: '16px', background: hashResult.valid ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${hashResult.valid ? '#BBF7D0' : '#FECACA'}`, color: hashResult.valid ? '#166534' : '#991B1B', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  {hashResult.valid ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                  {hashResult.message}
-                  {hashResult.brokenAt && (
-                    <span style={{ marginLeft: '8px', fontSize: '12px' }}>
-                      — Broken at entry {hashResult.brokenAt.index} (ID: {hashResult.brokenAt.logId?.slice(0, 8)}...)
-                    </span>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
-              <AuditLogTable logs={auditLogs} />
-            </Card>
+            <AuditLogTable
+              logs={auditLogs}
+              onVerify={handleVerifyChain}
+              onRefresh={fetchAuditLogs}
+              verifyLoading={false}
+              hashResult={hashResult}
+            />
           </motion.div>
         )}
 
@@ -533,19 +486,13 @@ export default function SuperAdminDashboard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
               <div>
                 <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Security Anomalies</h2>
-                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
-                  Suspicious activity detected by the anomaly engine
-                </p>
+                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Suspicious activity detected by the anomaly engine</p>
               </div>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 {stats && (
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, padding: '4px 12px', borderRadius: '20px', background: '#FEF3C7', color: '#D97706' }}>
-                      {stats.unresolved} Open
-                    </span>
-                    <span style={{ fontSize: '12px', fontWeight: 600, padding: '4px 12px', borderRadius: '20px', background: '#DCFCE7', color: '#16A34A' }}>
-                      {stats.resolved} Resolved
-                    </span>
+                    <span style={{ fontSize: '12px', fontWeight: 600, padding: '4px 12px', borderRadius: '20px', background: '#FEF3C7', color: '#D97706' }}>{stats.unresolved} Open</span>
+                    <span style={{ fontSize: '12px', fontWeight: 600, padding: '4px 12px', borderRadius: '20px', background: '#DCFCE7', color: '#16A34A' }}>{stats.resolved} Resolved</span>
                   </div>
                 )}
                 <GradientButton onClick={fetchAnomalies} variant="secondary">
@@ -553,7 +500,6 @@ export default function SuperAdminDashboard() {
                 </GradientButton>
               </div>
             </div>
-
             {anomalies.length === 0 ? (
               <Card style={{ textAlign: 'center', padding: '60px' }}>
                 <CheckCircle2 size={52} style={{ color: '#22C55E', margin: '0 auto 16px' }} />
@@ -563,12 +509,7 @@ export default function SuperAdminDashboard() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {anomalies.map((anomaly, i) => (
-                  <motion.div
-                    key={anomaly.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                  >
+                  <motion.div key={anomaly.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                     <AnomalyCard anomaly={anomaly} onResolved={fetchAnomalies} />
                   </motion.div>
                 ))}
