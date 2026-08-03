@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardList, AlertTriangle,
   UserPlus, ShieldAlert, CheckCircle2, Activity,
   Search, Download, Upload, Unlock, Lock,
-  ArrowRight, Eye, RefreshCw
+  ArrowRight, Eye, RefreshCw, FileDown, Shield
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import AuditLogTable from '../components/AuditLogTable';
@@ -15,6 +15,7 @@ import {
   getUsers, createUser, toggleUserActive,
   getAuditLogs, verifyHashChain,
   getAnomalies, getAnomalyStats,
+  getDownloads,
 } from '../services/api';
 
 // ─── Shared Primitives ────────────────────────────────────────────────────────
@@ -146,11 +147,13 @@ export default function SuperAdminDashboard() {
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
+  const [downloads, setDownloads] = useState([]);
   const [stats, setStats] = useState(null);
   const [hashResult, setHashResult] = useState(null);
   const [showHashModal, setShowHashModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [downloadSearch, setDownloadSearch] = useState('');
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'invigilator' });
 
   const fetchUsers = useCallback(async () => {
@@ -169,6 +172,10 @@ export default function SuperAdminDashboard() {
     try { const res = await getAnomalyStats(); setStats(res.data); } catch (e) {}
   }, []);
 
+  const fetchDownloads = useCallback(async () => {
+    try { const res = await getDownloads(); setDownloads(res.data); } catch (e) {}
+  }, []);
+
   useEffect(() => {
     fetchUsers();
     fetchStats();
@@ -178,6 +185,7 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     if (activeTab === 'audit') fetchAuditLogs();
     if (activeTab === 'anomalies') fetchAnomalies();
+    if (activeTab === 'downloads') fetchDownloads();
   }, [activeTab]);
 
   const handleCreateUser = async (e) => {
@@ -201,9 +209,7 @@ export default function SuperAdminDashboard() {
     } catch (e) { toast.error('Failed to update user status'); }
   };
 
-  const handleVerifyChain = () => {
-    setShowHashModal(true);
-  };
+  const handleVerifyChain = () => setShowHashModal(true);
 
   const performVerification = async () => {
     try {
@@ -220,14 +226,22 @@ export default function SuperAdminDashboard() {
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
   );
+  const filteredDownloads = downloads.filter(d =>
+    d.user?.name?.toLowerCase().includes(downloadSearch.toLowerCase()) ||
+    d.user?.email?.toLowerCase().includes(downloadSearch.toLowerCase()) ||
+    d.paper?.title?.toLowerCase().includes(downloadSearch.toLowerCase()) ||
+    d.downloadToken?.toLowerCase().includes(downloadSearch.toLowerCase())
+  );
   const adminCount = users.filter(u => u.role === 'admin').length;
   const invigilatorCount = users.filter(u => u.role === 'invigilator').length;
   const activeUsers = users.filter(u => u.isActive).length;
+  const todayDownloads = downloads.filter(d => new Date(d.downloadedAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)).length;
 
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={18} />, active: activeTab === 'dashboard', onClick: () => setActiveTab('dashboard') },
     { label: 'User Management', icon: <Users size={18} />, active: activeTab === 'users', onClick: () => setActiveTab('users') },
     { label: 'Audit Logs', icon: <ClipboardList size={18} />, active: activeTab === 'audit', onClick: () => setActiveTab('audit') },
+    { label: 'Downloads', icon: <FileDown size={18} />, active: activeTab === 'downloads', onClick: () => setActiveTab('downloads') },
     { label: 'Anomalies', icon: <AlertTriangle size={18} />, active: activeTab === 'anomalies', onClick: () => setActiveTab('anomalies') },
   ];
 
@@ -235,7 +249,6 @@ export default function SuperAdminDashboard() {
     <Layout navItems={navItems}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Hash Verification Modal */}
       <AnimatePresence>
         {showHashModal && (
           <HashVerificationModal
@@ -252,9 +265,7 @@ export default function SuperAdminDashboard() {
           <motion.div key="dashboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
             <div style={{ marginBottom: '24px' }}>
               <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>System Overview</h2>
-              <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
-                Monitor all users, security events and system health
-              </p>
+              <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Monitor all users, security events and system health</p>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
@@ -265,7 +276,6 @@ export default function SuperAdminDashboard() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-              {/* Recent Activity */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -294,9 +304,7 @@ export default function SuperAdminDashboard() {
                         {ev.icon}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {getEventLabel(log.eventType)}
-                        </p>
+                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getEventLabel(log.eventType)}</p>
                         <p style={{ fontSize: '11px', color: '#9CA3AF' }}>{log.user?.name || 'System'}</p>
                       </div>
                       <p style={{ fontSize: '11px', color: '#9CA3AF', flexShrink: 0 }}>{timeAgo(log.createdAt)}</p>
@@ -308,7 +316,6 @@ export default function SuperAdminDashboard() {
                 </button>
               </Card>
 
-              {/* User Breakdown + Quick Actions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <Card>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -371,17 +378,6 @@ export default function SuperAdminDashboard() {
                 </Card>
               </div>
             </div>
-
-            <AnimatePresence>
-              {hashResult && !showHashModal && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  style={{ padding: '14px 18px', borderRadius: '12px', marginBottom: '16px', background: hashResult.valid ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${hashResult.valid ? '#BBF7D0' : '#FECACA'}`, color: hashResult.valid ? '#166534' : '#991B1B', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  {hashResult.valid ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                  {hashResult.message}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
 
@@ -446,9 +442,7 @@ export default function SuperAdminDashboard() {
                           <p style={{ fontSize: '11px', color: '#6B7280' }}>{u.email}</p>
                           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             {getRoleBadge(u.role)}
-                            <span style={{ fontSize: '10px', color: u.isActive ? '#22C55E' : '#EF4444', fontWeight: 600 }}>
-                              ● {u.isActive ? 'Active' : 'Inactive'}
-                            </span>
+                            <span style={{ fontSize: '10px', color: u.isActive ? '#22C55E' : '#EF4444', fontWeight: 600 }}>● {u.isActive ? 'Active' : 'Inactive'}</span>
                           </div>
                         </div>
                       </div>
@@ -477,6 +471,120 @@ export default function SuperAdminDashboard() {
               verifyLoading={false}
               hashResult={hashResult}
             />
+          </motion.div>
+        )}
+
+        {/* ── Downloads ─────────────────────────────────────────── */}
+        {activeTab === 'downloads' && (
+          <motion.div key="downloads" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              <div>
+                <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Download History</h2>
+                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
+                  All watermarked downloads with forensic tokens — {downloads.length} total
+                </p>
+              </div>
+              <GradientButton onClick={fetchDownloads} variant="secondary">
+                <RefreshCw size={14} /> Refresh
+              </GradientButton>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+              <StatCard icon={<FileDown size={20} style={{ color: '#16A34A' }} />} label="Total Downloads" value={downloads.length} bg="#DCFCE7" sublabel="All time" />
+              <StatCard icon={<Download size={20} style={{ color: '#2563EB' }} />} label="Today's Downloads" value={todayDownloads} bg="#DBEAFE" sublabel="Last 24 hours" />
+              <StatCard icon={<Shield size={20} style={{ color: '#7C3AED' }} />} label="Unique Papers" value={new Set(downloads.map(d => d.paperId)).size} bg="#EDE9FE" sublabel="Downloaded papers" />
+            </div>
+
+            {/* Search */}
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <Search size={15} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
+              <input
+                placeholder="Search by user, paper, or token..."
+                value={downloadSearch}
+                onChange={e => setDownloadSearch(e.target.value)}
+                style={{ ...inputStyle, paddingLeft: '40px', height: '44px', borderRadius: '12px' }}
+                onFocus={focusInput}
+                onBlur={blurInput}
+              />
+            </div>
+
+            {/* Downloads Table */}
+            {filteredDownloads.length === 0 ? (
+              <Card style={{ textAlign: 'center', padding: '60px' }}>
+                <FileDown size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
+                <p style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>No downloads found</p>
+                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Downloads will appear here after invigilators access papers</p>
+              </Card>
+            ) : (
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                {/* Table Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr 1.2fr 0.8fr', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9', padding: '12px 20px' }}>
+                  {['Invigilator', 'Paper', 'Token', 'Downloaded At', 'IP Address'].map((h, i) => (
+                    <div key={i} style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</div>
+                  ))}
+                </div>
+
+                {/* Table Rows */}
+                <div style={{ maxHeight: '520px', overflowY: 'auto' }}>
+                  {filteredDownloads.map((d, i) => (
+                    <motion.div
+                      key={d.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr 1.2fr 0.8fr',
+                        padding: '14px 20px',
+                        background: i % 2 === 0 ? '#fff' : '#FAFBFC',
+                        borderBottom: '1px solid #F8FAFC',
+                        transition: 'background 150ms ease',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
+                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#FAFBFC'}
+                    >
+                      {/* Invigilator */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #60A5FA, #818CF8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                          {d.user?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '12px', fontWeight: 600, color: '#111827' }}>{d.user?.name}</p>
+                          <p style={{ fontSize: '10px', color: '#9CA3AF' }}>{d.user?.email}</p>
+                        </div>
+                      </div>
+
+                      {/* Paper */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FileDown size={14} style={{ color: '#16A34A', flexShrink: 0 }} />
+                        <div>
+                          <p style={{ fontSize: '12px', fontWeight: 600, color: '#111827' }}>{d.paper?.title}</p>
+                          <p style={{ fontSize: '10px', color: '#9CA3AF' }}>{d.paper?.subject}</p>
+                        </div>
+                      </div>
+
+                      {/* Token */}
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', background: '#F3F4F6', padding: '2px 8px', borderRadius: '6px' }}>
+                          {d.downloadToken?.slice(0, 8)}...
+                        </span>
+                      </div>
+
+                      {/* Downloaded At */}
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{timeAgo(d.downloadedAt)}</p>
+                        <p style={{ fontSize: '10px', color: '#9CA3AF' }}>{new Date(d.downloadedAt).toLocaleString()}</p>
+                      </div>
+
+                      {/* IP */}
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#6B7280' }}>{d.ipAddress || '—'}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </Card>
+            )}
           </motion.div>
         )}
 
