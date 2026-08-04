@@ -5,30 +5,28 @@ import {
   LayoutDashboard, FileText, Upload, Calendar,
   Users, Lock, Unlock, Trash2, CheckCircle2,
   Clock, ShieldCheck, AlertCircle, FolderOpen,
-  Bell, ArrowRight, Activity, TrendingUp,
-  Download, Eye
+  ArrowRight, Activity, Download, Eye,
+  ChevronRight, Circle
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import CountdownTimer from '../components/CountdownTimer';
 import {
   getPapers, uploadPaper, deletePaper, schedulePaper,
   getPermissions, grantPermission, revokePermission,
-  getAuditLogs,
+  getAuditLogs, getDownloads,
 } from '../services/api';
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // ─── Shared Primitives ────────────────────────────────────────────────────────
 
-const Card = ({ children, style = {}, onClick }) => (
-  <div
-    onClick={onClick}
-    style={{
-      background: '#fff', borderRadius: '16px', padding: '24px',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6',
-      cursor: onClick ? 'pointer' : 'default',
-      ...style,
-    }}
-  >
+const Card = ({ children, style = {} }) => (
+  <div style={{
+    background: '#fff', borderRadius: '16px', padding: '24px',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6',
+    ...style,
+  }}>
     {children}
   </div>
 );
@@ -46,14 +44,9 @@ const StatCard = ({ icon, label, value, bg, color, sublabel }) => (
       <div>
         <p style={{ fontSize: '28px', fontWeight: 800, color: '#111827', lineHeight: 1 }}>{value}</p>
         <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '6px', fontWeight: 500 }}>{label}</p>
-        {sublabel && (
-          <p style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '3px' }}>{sublabel}</p>
-        )}
+        {sublabel && <p style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '3px' }}>{sublabel}</p>}
       </div>
-      <div style={{
-        width: '46px', height: '46px', borderRadius: '12px',
-        background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
+      <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>
         {icon}
       </div>
     </div>
@@ -81,10 +74,7 @@ const GradientButton = ({ onClick, disabled, loading, children, style = {}, vari
       }}
     >
       {loading && (
-        <div style={{
-          width: '13px', height: '13px', border: '2px solid rgba(255,255,255,0.4)',
-          borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite',
-        }} />
+        <div style={{ width: '13px', height: '13px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
       )}
       {children}
     </motion.button>
@@ -110,14 +100,10 @@ function timeAgo(dateStr) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-function getEventIcon(eventType) {
-  if (eventType === 'PAPER_UPLOADED') return { icon: <Upload size={13} />, bg: '#EFF6FF', color: '#2563EB' };
-  if (eventType === 'PAPER_DOWNLOADED') return { icon: <Download size={13} />, bg: '#F0FDF4', color: '#16A34A' };
-  if (eventType === 'PAPER_RELEASED') return { icon: <Unlock size={13} />, bg: '#F0FDF4', color: '#16A34A' };
-  if (eventType === 'PERMISSION_GRANTED') return { icon: <Users size={13} />, bg: '#EDE9FE', color: '#7C3AED' };
-  if (eventType === 'ANOMALY_DETECTED') return { icon: <AlertCircle size={13} />, bg: '#FEF2F2', color: '#EF4444' };
-  if (eventType === 'ADMIN_ACTION') return { icon: <ShieldCheck size={13} />, bg: '#FEF3C7', color: '#D97706' };
-  return { icon: <Activity size={13} />, bg: '#F3F4F6', color: '#6B7280' };
+function getStatusBadge(paper) {
+  if (paper.isReleased) return { label: 'Released', bg: '#DCFCE7', color: '#16A34A' };
+  if (paper.releaseAt) return { label: 'Scheduled', bg: '#FEF3C7', color: '#D97706' };
+  return { label: 'Pending', bg: '#F3F4F6', color: '#6B7280' };
 }
 
 function getEventLabel(eventType) {
@@ -131,14 +117,156 @@ function getEventLabel(eventType) {
     ADMIN_ACTION: 'Admin action',
     USER_LOGIN: 'User logged in',
     USER_LOGOUT: 'User logged out',
+    AI_QUERY: 'AI Assistant queried',
   };
   return labels[eventType] || eventType;
 }
 
-function getStatusBadge(paper) {
-  if (paper.isReleased) return { label: 'Released', bg: '#DCFCE7', color: '#16A34A' };
-  if (paper.releaseAt) return { label: 'Scheduled', bg: '#FEF3C7', color: '#D97706' };
-  return { label: 'Pending', bg: '#F3F4F6', color: '#6B7280' };
+// ─── Paper Lifecycle Component ────────────────────────────────────────────────
+
+function PaperLifecycle({ paper, downloads, permissions }) {
+  const paperDownloads = downloads.filter(d => d.paperId === paper.id);
+  const paperPermissions = permissions.filter(p => p.paperId === paper.id && p.isActive);
+
+  const steps = [
+    {
+      label: 'Uploaded',
+      desc: `By ${paper.uploader?.name || 'Unknown'}`,
+      time: paper.createdAt,
+      done: true,
+      icon: <Upload size={14} />,
+      color: '#2563EB', bg: '#DBEAFE',
+    },
+    {
+      label: 'Encrypted',
+      desc: 'AES-256-CBC encryption applied',
+      time: paper.createdAt,
+      done: true,
+      icon: <ShieldCheck size={14} />,
+      color: '#7C3AED', bg: '#EDE9FE',
+    },
+    {
+      label: 'Scheduled',
+      desc: paper.releaseAt ? new Date(paper.releaseAt).toLocaleString() : 'Not yet scheduled',
+      time: paper.releaseAt,
+      done: !!paper.releaseAt,
+      icon: <Calendar size={14} />,
+      color: '#D97706', bg: '#FEF3C7',
+    },
+    {
+      label: 'Released',
+      desc: paper.isReleased ? `Released at ${new Date(paper.releaseAt).toLocaleTimeString()}` : 'Awaiting release time',
+      time: paper.isReleased ? paper.releaseAt : null,
+      done: paper.isReleased,
+      icon: <Unlock size={14} />,
+      color: '#16A34A', bg: '#DCFCE7',
+    },
+    {
+      label: 'Downloaded',
+      desc: paperDownloads.length > 0 ? `${paperDownloads.length} invigilator${paperDownloads.length > 1 ? 's' : ''}` : 'No downloads yet',
+      time: paperDownloads.length > 0 ? paperDownloads[paperDownloads.length - 1]?.downloadedAt : null,
+      done: paperDownloads.length > 0,
+      icon: <Download size={14} />,
+      color: '#22C55E', bg: '#DCFCE7',
+    },
+  ];
+
+  return (
+    <motion.div
+      whileHover={{ y: -2, boxShadow: '0 12px 32px rgba(0,0,0,0.10)' }}
+      style={{
+        background: '#fff', borderRadius: '16px', padding: '20px',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6',
+        marginBottom: '16px',
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <FileText size={22} style={{ color: '#2563EB' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>{paper.title}</p>
+            <p style={{ fontSize: '12px', color: '#6B7280' }}>{paper.subject} • {new Date(paper.examDate).toLocaleDateString()}</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {paperPermissions.length > 0 && (
+            <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '20px', background: '#EDE9FE', color: '#7C3AED' }}>
+              {paperPermissions.length} assigned
+            </span>
+          )}
+          {(() => {
+            const badge = getStatusBadge(paper);
+            return (
+              <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 12px', borderRadius: '20px', background: badge.bg, color: badge.color }}>
+                {badge.label}
+              </span>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
+        {steps.map((step, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+              {/* Step Circle */}
+              <motion.div
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                style={{
+                  width: '36px', height: '36px', borderRadius: '50%',
+                  background: step.done ? step.bg : '#F3F4F6',
+                  border: `2px solid ${step.done ? step.color : '#E5E7EB'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: step.done ? step.color : '#9CA3AF',
+                  marginBottom: '8px', flexShrink: 0,
+                  boxShadow: step.done ? `0 0 0 4px ${step.bg}` : 'none',
+                  transition: 'all 300ms ease',
+                }}
+              >
+                {step.done ? step.icon : <Circle size={10} style={{ color: '#D1D5DB' }} />}
+              </motion.div>
+              {/* Step Label */}
+              <p style={{ fontSize: '11px', fontWeight: step.done ? 700 : 400, color: step.done ? '#111827' : '#9CA3AF', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                {step.label}
+              </p>
+              <p style={{ fontSize: '9px', color: step.done ? '#6B7280' : '#D1D5DB', textAlign: 'center', maxWidth: '80px', lineHeight: 1.3, marginTop: '2px' }}>
+                {step.done && step.time ? timeAgo(step.time) : step.done ? step.desc.slice(0, 20) : '—'}
+              </p>
+            </div>
+            {/* Connector Line */}
+            {i < steps.length - 1 && (
+              <div style={{
+                height: '2px', flex: 0.3, marginBottom: '28px',
+                background: steps[i + 1].done ? `linear-gradient(90deg, ${step.color}, ${steps[i + 1].color})` : '#E5E7EB',
+                transition: 'all 300ms ease',
+              }} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Downloads detail */}
+      {paperDownloads.length > 0 && (
+        <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Download Records</p>
+          {paperDownloads.slice(0, 3).map((d, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < paperDownloads.length - 1 ? '4px' : 0 }}>
+              <p style={{ fontSize: '12px', color: '#374151' }}>{d.user?.name || 'Unknown'}</p>
+              <p style={{ fontSize: '11px', color: '#6B7280' }}>{timeAgo(d.downloadedAt)}</p>
+            </div>
+          ))}
+          {paperDownloads.length > 3 && (
+            <p style={{ fontSize: '11px', color: '#16A34A', marginTop: '4px' }}>+{paperDownloads.length - 3} more downloads</p>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -149,7 +277,9 @@ export default function AdminDashboard() {
   const [invigilators, setInvigilators] = useState([]);
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [permissions, setPermissions] = useState([]);
+  const [allPermissions, setAllPermissions] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadForm, setUploadForm] = useState({ title: '', subject: '', examDate: '', releaseAt: '', file: null });
   const [scheduleForm, setScheduleForm] = useState({ paperId: '', releaseAt: '' });
@@ -160,7 +290,7 @@ export default function AdminDashboard() {
 
   const fetchInvigilators = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/users/invigilators', {
+      const res = await axios.get(`${API_URL}/api/users/invigilators`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setInvigilators(res.data);
@@ -171,11 +301,40 @@ export default function AdminDashboard() {
     try { const res = await getAuditLogs(); setAuditLogs(res.data); } catch (e) {}
   }, []);
 
+  const fetchDownloads = useCallback(async () => {
+    try { const res = await getDownloads(); setDownloads(res.data); } catch (e) {}
+  }, []);
+
+  const fetchAllPermissions = useCallback(async (papersList) => {
+    try {
+      const allPerms = [];
+      for (const paper of papersList) {
+        try {
+          const res = await getPermissions(paper.id);
+          allPerms.push(...res.data.permissions.map(p => ({ ...p, paperId: paper.id })));
+        } catch (e) {}
+      }
+      setAllPermissions(allPerms);
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     fetchPapers();
     fetchInvigilators();
     fetchAuditLogs();
+    fetchDownloads();
   }, []);
+
+  useEffect(() => {
+    if (papers.length > 0) fetchAllPermissions(papers);
+  }, [papers]);
+
+  useEffect(() => {
+    if (activeTab === 'lifecycle') {
+      fetchDownloads();
+      fetchAllPermissions(papers);
+    }
+  }, [activeTab]);
 
   const fetchPermissions = async (paperId) => {
     try { const res = await getPermissions(paperId); setPermissions(res.data.permissions); } catch (e) {}
@@ -244,17 +403,15 @@ export default function AdminDashboard() {
     } catch (e) { toast.error('Failed to revoke permission'); }
   };
 
-  // Derived data
   const released = papers.filter(p => p.isReleased).length;
   const scheduled = papers.filter(p => !p.isReleased && p.releaseAt).length;
   const pending = papers.filter(p => !p.isReleased && !p.releaseAt).length;
+  const todayDownloads = downloads.filter(d => new Date(d.downloadedAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)).length;
+  const recentActivity = auditLogs.slice(0, 6);
   const upcomingReleases = papers
     .filter(p => !p.isReleased && p.releaseAt)
     .sort((a, b) => new Date(a.releaseAt) - new Date(b.releaseAt))
     .slice(0, 4);
-  const recentActivity = auditLogs
-    .filter(l => ['PAPER_UPLOADED', 'PAPER_DOWNLOADED', 'PAPER_RELEASED', 'PERMISSION_GRANTED', 'PERMISSION_REVOKED', 'ANOMALY_DETECTED', 'ADMIN_ACTION'].includes(l.eventType))
-    .slice(0, 6);
 
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={18} />, active: activeTab === 'dashboard', onClick: () => setActiveTab('dashboard') },
@@ -262,6 +419,7 @@ export default function AdminDashboard() {
     { label: 'Upload Paper', icon: <Upload size={18} />, active: activeTab === 'upload', onClick: () => setActiveTab('upload') },
     { label: 'Schedule', icon: <Calendar size={18} />, active: activeTab === 'schedule', onClick: () => setActiveTab('schedule') },
     { label: 'Permissions', icon: <Users size={18} />, active: activeTab === 'permissions', onClick: () => setActiveTab('permissions') },
+    { label: 'Paper Lifecycle', icon: <Activity size={18} />, active: activeTab === 'lifecycle', onClick: () => setActiveTab('lifecycle') },
   ];
 
   return (
@@ -273,26 +431,19 @@ export default function AdminDashboard() {
         {/* ── Dashboard ─────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
           <motion.div key="dashboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-
-            {/* Page header */}
             <div style={{ marginBottom: '24px' }}>
               <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Dashboard Overview</h2>
-              <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
-                Monitor papers, schedules, permissions and secure releases
-              </p>
+              <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Monitor papers, schedules, permissions and secure releases</p>
             </div>
 
-            {/* Stat Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-              <StatCard icon={<FileText size={20} style={{ color: '#2563EB' }} />} label="Total Papers" value={papers.length} bg="#DBEAFE" sublabel="All time" />
-              <StatCard icon={<CheckCircle2 size={20} style={{ color: '#22C55E' }} />} label="Released" value={released} bg="#DCFCE7" sublabel="Available to invigilators" />
-              <StatCard icon={<Clock size={20} style={{ color: '#F59E0B' }} />} label="Scheduled" value={scheduled} bg="#FEF3C7" sublabel="Awaiting release" />
-              <StatCard icon={<AlertCircle size={20} style={{ color: '#6B7280' }} />} label="Pending" value={pending} bg="#F3F4F6" sublabel="Not yet scheduled" />
+              <StatCard icon={<FileText size={20} />} label="Total Papers" value={papers.length} bg="#DBEAFE" color="#2563EB" sublabel="All time" />
+              <StatCard icon={<CheckCircle2 size={20} />} label="Released" value={released} bg="#DCFCE7" color="#16A34A" sublabel="Available to invigilators" />
+              <StatCard icon={<Clock size={20} />} label="Scheduled" value={scheduled} bg="#FEF3C7" color="#D97706" sublabel="Awaiting release" />
+              <StatCard icon={<Download size={20} />} label="Downloads Today" value={todayDownloads} bg="#EDE9FE" color="#7C3AED" sublabel="Last 24 hours" />
             </div>
 
-            {/* Main content grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-
               {/* Upcoming Releases */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -315,11 +466,7 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 ) : upcomingReleases.map((paper, i) => (
-                  <motion.div
-                    key={paper.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
+                  <motion.div key={paper.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                     style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < upcomingReleases.length - 1 ? '1px solid #F3F4F6' : 'none' }}
                   >
                     <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -352,31 +499,20 @@ export default function AdminDashboard() {
                     <Activity size={28} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
                     <p style={{ fontSize: '13px' }}>No recent activity</p>
                   </div>
-                ) : recentActivity.map((log, i) => {
-                  const ev = getEventIcon(log.eventType);
-                  return (
-                    <motion.div
-                      key={log.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.04 }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < recentActivity.length - 1 ? '1px solid #F9FAFB' : 'none' }}
-                    >
-                      <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: ev.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ev.color, flexShrink: 0 }}>
-                        {ev.icon}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {getEventLabel(log.eventType)}
-                        </p>
-                        <p style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                          {log.user?.name || 'System'}
-                        </p>
-                      </div>
-                      <p style={{ fontSize: '11px', color: '#9CA3AF', flexShrink: 0 }}>{timeAgo(log.createdAt)}</p>
-                    </motion.div>
-                  );
-                })}
+                ) : recentActivity.map((log, i) => (
+                  <motion.div key={log.id} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < recentActivity.length - 1 ? '1px solid #F9FAFB' : 'none' }}
+                  >
+                    <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Activity size={13} style={{ color: '#2563EB' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getEventLabel(log.eventType)}</p>
+                      <p style={{ fontSize: '11px', color: '#9CA3AF' }}>{log.user?.name || 'System'}</p>
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#9CA3AF', flexShrink: 0 }}>{timeAgo(log.createdAt)}</p>
+                  </motion.div>
+                ))}
               </Card>
             </div>
 
@@ -389,16 +525,8 @@ export default function AdminDashboard() {
                   { label: 'Schedule a Release', desc: 'Set time-lock for papers', icon: <Calendar size={20} />, bg: '#FEF3C7', color: '#D97706', tab: 'schedule' },
                   { label: 'Manage Permissions', desc: 'Assign invigilators', icon: <Users size={20} />, bg: '#EDE9FE', color: '#7C3AED', tab: 'permissions' },
                 ].map(action => (
-                  <motion.button
-                    key={action.tab}
-                    onClick={() => setActiveTab(action.tab)}
-                    whileHover={{ y: -3, boxShadow: '0 8px 24px rgba(0,0,0,0.10)' }}
-                    whileTap={{ scale: 0.97 }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '14px', padding: '16px',
-                      borderRadius: '12px', border: '1.5px solid #F3F4F6', background: '#FAFAFA',
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 200ms ease',
-                    }}
+                  <motion.button key={action.tab} onClick={() => setActiveTab(action.tab)} whileHover={{ y: -3, boxShadow: '0 8px 24px rgba(0,0,0,0.10)' }} whileTap={{ scale: 0.97 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', borderRadius: '12px', border: '1.5px solid #F3F4F6', background: '#FAFAFA', cursor: 'pointer', textAlign: 'left', transition: 'all 200ms ease' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = action.color; e.currentTarget.style.background = action.bg; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = '#F3F4F6'; e.currentTarget.style.background = '#FAFAFA'; }}
                   >
@@ -433,8 +561,7 @@ export default function AdminDashboard() {
               <Card style={{ textAlign: 'center', padding: '60px' }}>
                 <FolderOpen size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
                 <p style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>No papers uploaded yet</p>
-                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px', marginBottom: '20px' }}>Upload your first exam paper to get started</p>
-                <GradientButton onClick={() => setActiveTab('upload')} style={{ margin: '0 auto' }}>
+                <GradientButton onClick={() => setActiveTab('upload')} style={{ margin: '20px auto 0' }}>
                   <Upload size={14} /> Upload Paper
                 </GradientButton>
               </Card>
@@ -443,11 +570,7 @@ export default function AdminDashboard() {
                 {papers.map((paper, i) => {
                   const badge = getStatusBadge(paper);
                   return (
-                    <motion.div
-                      key={paper.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
+                    <motion.div key={paper.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                       whileHover={{ y: -4, boxShadow: '0 16px 40px rgba(0,0,0,0.10)' }}
                       style={{ background: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6' }}
                     >
@@ -539,46 +662,39 @@ export default function AdminDashboard() {
                   </GradientButton>
                 </form>
               </Card>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <Card style={{ background: 'linear-gradient(135deg, #F8FAFF, #EEF4FF)', border: '2px dashed #BFDBFE', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '200px' }}>
-                  <div style={{ width: '64px', height: '64px', borderRadius: '18px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', border: '1px solid #BFDBFE' }}>
-                    <ShieldCheck size={32} style={{ color: '#2563EB' }} />
-                  </div>
-                  <p style={{ fontSize: '15px', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>Secure Upload</p>
-                  <p style={{ fontSize: '12px', color: '#6B7280', textAlign: 'center', maxWidth: '200px' }}>
-                    Your paper is encrypted with AES-256-CBC before storage
-                  </p>
-                  {uploadForm.file && (
-                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: '14px', padding: '10px 14px', borderRadius: '10px', background: '#F0FDF4', border: '1px solid #BBF7D0', width: '100%', maxWidth: '240px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <CheckCircle2 size={15} style={{ color: '#22C55E', flexShrink: 0 }} />
-                        <div>
-                          <p style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>{uploadForm.file.name}</p>
-                          <p style={{ fontSize: '11px', color: '#4ADE80' }}>{(uploadForm.file.size / 1024).toFixed(1)} KB — Ready</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </Card>
-
-                <Card>
-                  <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827', marginBottom: '12px' }}>Encryption Process</p>
-                  {[
-                    { icon: <Lock size={13} />, label: 'AES-256-CBC Encryption', color: '#2563EB', bg: '#EFF6FF' },
-                    { icon: <ShieldCheck size={13} />, label: 'SHA-256 Integrity Hash', color: '#7C3AED', bg: '#EDE9FE' },
-                    { icon: <CheckCircle2 size={13} />, label: 'Original File Deleted', color: '#16A34A', bg: '#DCFCE7' },
-                    { icon: <Eye size={13} />, label: 'Key Stored Encrypted', color: '#D97706', bg: '#FEF3C7' },
-                  ].map((item, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#FAFAFA', marginBottom: '8px', border: '1px solid #F3F4F6' }}>
-                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, flexShrink: 0 }}>
-                        {item.icon}
-                      </div>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#374151' }}>{item.label}</span>
+              <Card style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #F8FAFF, #EEF4FF)', border: '2px dashed #BFDBFE' }}>
+                <div style={{ width: '72px', height: '72px', borderRadius: '20px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', border: '1px solid #BFDBFE' }}>
+                  <ShieldCheck size={36} style={{ color: '#2563EB' }} />
+                </div>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>Secure Upload</p>
+                <p style={{ fontSize: '13px', color: '#6B7280', textAlign: 'center', marginBottom: '24px', maxWidth: '240px' }}>
+                  Your paper is encrypted with AES-256-CBC before storage
+                </p>
+                {[
+                  { icon: <Lock size={13} />, label: 'AES-256-CBC Encryption', color: '#2563EB', bg: '#EFF6FF' },
+                  { icon: <ShieldCheck size={13} />, label: 'SHA-256 Integrity Hash', color: '#7C3AED', bg: '#EDE9FE' },
+                  { icon: <CheckCircle2 size={13} />, label: 'Original File Deleted', color: '#16A34A', bg: '#DCFCE7' },
+                  { icon: <Eye size={13} />, label: 'Key Stored Encrypted', color: '#D97706', bg: '#FEF3C7' },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#fff', marginBottom: '8px', border: '1px solid #F3F4F6', width: '100%', maxWidth: '280px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, flexShrink: 0 }}>
+                      {item.icon}
                     </div>
-                  ))}
-                </Card>
-              </div>
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: '#374151' }}>{item.label}</span>
+                  </div>
+                ))}
+                {uploadForm.file && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: '16px', padding: '12px 16px', borderRadius: '10px', background: '#F0FDF4', border: '1px solid #BBF7D0', width: '100%', maxWidth: '280px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle2 size={15} style={{ color: '#22C55E', flexShrink: 0 }} />
+                      <div>
+                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>{uploadForm.file.name}</p>
+                        <p style={{ fontSize: '11px', color: '#4ADE80' }}>{(uploadForm.file.size / 1024).toFixed(1)} KB — Ready</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </Card>
             </div>
           </motion.div>
         )}
@@ -612,7 +728,6 @@ export default function AdminDashboard() {
                   </GradientButton>
                 </form>
               </Card>
-
               <Card>
                 <p style={{ fontSize: '15px', fontWeight: 700, color: '#111827', marginBottom: '16px' }}>Paper Timeline</p>
                 {papers.length === 0 ? (
@@ -625,11 +740,7 @@ export default function AdminDashboard() {
                     {papers.map((paper, i) => {
                       const badge = getStatusBadge(paper);
                       return (
-                        <motion.div
-                          key={paper.id}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: i * 0.05 }}
+                        <motion.div key={paper.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
                           style={{ padding: '14px', borderRadius: '12px', border: '1px solid #F3F4F6', background: '#FAFAFA' }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -646,9 +757,7 @@ export default function AdminDashboard() {
                           {paper.isReleased && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <Unlock size={12} style={{ color: '#22C55E' }} />
-                              <span style={{ fontSize: '11px', color: '#22C55E', fontWeight: 600 }}>
-                                Released {paper.releaseAt ? new Date(paper.releaseAt).toLocaleString() : ''}
-                              </span>
+                              <span style={{ fontSize: '11px', color: '#22C55E', fontWeight: 600 }}>Released {paper.releaseAt ? new Date(paper.releaseAt).toLocaleString() : ''}</span>
                             </div>
                           )}
                           {!paper.releaseAt && (
@@ -682,10 +791,7 @@ export default function AdminDashboard() {
                     const badge = getStatusBadge(paper);
                     const isSelected = selectedPaper?.id === paper.id;
                     return (
-                      <motion.div
-                        key={paper.id}
-                        onClick={() => handleSelectPaper(paper)}
-                        whileHover={{ x: 3 }}
+                      <motion.div key={paper.id} onClick={() => handleSelectPaper(paper)} whileHover={{ x: 3 }}
                         style={{ padding: '14px 16px', borderRadius: '12px', cursor: 'pointer', border: `1.5px solid ${isSelected ? '#2563EB' : '#F3F4F6'}`, background: isSelected ? '#EFF6FF' : '#FAFAFA', transition: 'all 200ms ease' }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -717,11 +823,7 @@ export default function AdminDashboard() {
                       {invigilators.map((inv, i) => {
                         const hasPermission = permissions.find(p => p.invigilator.id === inv.id && p.isActive);
                         return (
-                          <motion.div
-                            key={inv.id}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.05 }}
+                          <motion.div key={inv.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '12px', border: `1px solid ${hasPermission ? '#BBF7D0' : '#F3F4F6'}`, background: hasPermission ? '#F0FDF4' : '#FAFAFA', transition: 'all 300ms ease' }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -735,13 +837,9 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             {hasPermission ? (
-                              <GradientButton onClick={() => handleRevokePermission(inv.id)} variant="danger" style={{ fontSize: '12px', padding: '6px 14px' }}>
-                                Revoke
-                              </GradientButton>
+                              <GradientButton onClick={() => handleRevokePermission(inv.id)} variant="danger" style={{ fontSize: '12px', padding: '6px 14px' }}>Revoke</GradientButton>
                             ) : (
-                              <GradientButton onClick={() => handleGrantPermission(inv.id)} style={{ fontSize: '12px', padding: '6px 14px' }}>
-                                Grant
-                              </GradientButton>
+                              <GradientButton onClick={() => handleGrantPermission(inv.id)} style={{ fontSize: '12px', padding: '6px 14px' }}>Grant</GradientButton>
                             )}
                           </motion.div>
                         );
@@ -754,11 +852,49 @@ export default function AdminDashboard() {
                   <div style={{ textAlign: 'center', color: '#9CA3AF' }}>
                     <FileText size={40} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
                     <p style={{ fontSize: '14px', fontWeight: 700, color: '#6B7280' }}>Select a paper</p>
-                    <p style={{ fontSize: '12px', marginTop: '4px' }}>Choose a paper from the left to manage its permissions</p>
+                    <p style={{ fontSize: '12px', marginTop: '4px' }}>Choose a paper from the left to manage permissions</p>
                   </div>
                 </Card>
               )}
             </div>
+          </motion.div>
+        )}
+
+        {/* ── Paper Lifecycle ───────────────────────────────────── */}
+        {activeTab === 'lifecycle' && (
+          <motion.div key="lifecycle" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              <div>
+                <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Paper Lifecycle Tracker</h2>
+                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
+                  Track the complete journey of each paper from upload to download
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {['Upload', 'Encrypt', 'Schedule', 'Release', 'Download'].map((step, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '20px', background: '#F3F4F6' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: ['#2563EB', '#7C3AED', '#D97706', '#16A34A', '#22C55E'][i] }} />
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#6B7280' }}>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {papers.length === 0 ? (
+              <Card style={{ textAlign: 'center', padding: '60px' }}>
+                <Activity size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
+                <p style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>No papers to track</p>
+              </Card>
+            ) : (
+              papers.map(paper => (
+                <PaperLifecycle
+                  key={paper.id}
+                  paper={paper}
+                  downloads={downloads}
+                  permissions={allPermissions}
+                />
+              ))
+            )}
           </motion.div>
         )}
 
