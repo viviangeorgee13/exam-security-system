@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardList, AlertTriangle,
   UserPlus, ShieldAlert, CheckCircle2, Activity,
   Search, Download, Upload, Unlock, Lock,
-  ArrowRight, Eye, RefreshCw, FileDown, Shield
+  ArrowRight, Eye, RefreshCw, FileDown, Shield, Sparkles
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import AuditLogTable from '../components/AuditLogTable';
@@ -139,6 +139,212 @@ function getRoleBadge(role) {
     </span>
   );
 }
+// ─── AI Daily Summary Component ───────────────────────────────────────────────
+
+function AIDailySummary() {
+  const [summary, setSummary] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState(null);
+
+  const generateSummary = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/ai/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: 'Summarise today\'s activity and system health',
+          history: [],
+        }),
+      });
+      const data = await res.json();
+      setSummary(data.answer || 'Unable to generate summary.');
+      setGenerated(true);
+      setGeneratedAt(new Date());
+    } catch (e) {
+      setSummary('Failed to generate summary. Please try again.');
+      setGenerated(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatSummary = (text) => {
+    const lines = text.split('\n');
+    return lines.map((line, i) => {
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <p key={i} style={{ fontWeight: 700, color: '#111827', fontSize: '14px', marginBottom: '8px', marginTop: i > 0 ? '16px' : 0 }}>{line.replace(/\*\*/g, '')}</p>;
+      }
+      if (line.match(/^\*\*(.+)\*\*$/)) {
+        return <p key={i} style={{ fontWeight: 700, color: '#111827', fontSize: '14px', marginBottom: '8px', marginTop: i > 0 ? '16px' : 0 }}>{line.replace(/\*\*/g, '')}</p>;
+      }
+      if (line.startsWith('* ') || line.startsWith('- ') || line.startsWith('• ')) {
+        return (
+          <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+            <span style={{ color: '#2563EB', flexShrink: 0 }}>•</span>
+            <span style={{ color: '#374151', fontSize: '14px', lineHeight: 1.6 }}>{line.replace(/^[*\-•]\s/, '').replace(/\*\*/g, '')}</span>
+          </div>
+        );
+      }
+      if (line.trim() === '') return <div key={i} style={{ height: '8px' }} />;
+      return <p key={i} style={{ color: '#374151', fontSize: '14px', marginBottom: '4px', lineHeight: 1.6 }}>{line.replace(/\*\*/g, '')}</p>;
+    });
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+        <div>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>AI Daily Summary</h2>
+          <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+        <motion.button
+          onClick={generateSummary}
+          disabled={loading}
+          whileHover={!loading ? { y: -2, boxShadow: '0 8px 20px rgba(37,99,235,0.3)' } : {}}
+          whileTap={!loading ? { scale: 0.97 } : {}}
+          style={{
+            background: loading ? '#93C5FD' : 'linear-gradient(90deg, #2563EB, #4F46E5)',
+            color: '#fff', border: 'none', borderRadius: '12px',
+            padding: '12px 20px', fontSize: '13px', fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 4px 14px rgba(37,99,235,0.22)',
+          }}
+        >
+          {loading ? (
+            <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          ) : <Sparkles size={16} />}
+          {loading ? 'Generating...' : generated ? 'Regenerate' : 'Generate Summary'}
+        </motion.button>
+      </div>
+
+      {/* Not generated yet */}
+      {!generated && !loading && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={{
+            background: '#fff', borderRadius: '20px', padding: '60px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{
+            width: '80px', height: '80px', borderRadius: '24px',
+            background: 'linear-gradient(135deg, #EFF6FF, #EDE9FE)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px', border: '1px solid #BFDBFE',
+          }}>
+            <Sparkles size={40} style={{ color: '#2563EB' }} />
+          </div>
+          <p style={{ fontSize: '18px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
+            Generate Your Daily Briefing
+          </p>
+          <p style={{ fontSize: '13px', color: '#6B7280', maxWidth: '400px', margin: '0 auto 24px', lineHeight: 1.6 }}>
+            The AI will analyse today's system activity, downloads, anomalies, and audit logs to generate a comprehensive security briefing.
+          </p>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {['Today\'s Downloads', 'Security Anomalies', 'Audit Activity', 'System Health', 'Recommendations'].map((item, i) => (
+              <span key={i} style={{ fontSize: '12px', fontWeight: 600, padding: '6px 14px', borderRadius: '20px', background: '#F3F4F6', color: '#6B7280' }}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={{
+            background: '#fff', borderRadius: '20px', padding: '60px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '20px' }}>
+            {[0, 1, 2].map(i => (
+              <motion.div
+                key={i}
+                animate={{ y: [-8, 0, -8] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
+                style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#2563EB' }}
+              />
+            ))}
+          </div>
+          <p style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
+            Analysing System Activity...
+          </p>
+          <p style={{ fontSize: '13px', color: '#6B7280' }}>
+            ExamSecure AI is reviewing today's data
+          </p>
+        </motion.div>
+      )}
+
+      {/* Summary Result */}
+      {generated && !loading && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          {/* Summary Card */}
+          <div style={{
+            background: '#fff', borderRadius: '20px', overflow: 'hidden',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #F3F4F6',
+            marginBottom: '16px',
+          }}>
+            {/* Card Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #1e3a8a, #2563EB, #4F46E5)',
+              padding: '20px 28px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.2)' }}>
+                  <Sparkles size={22} style={{ color: '#fff' }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: '15px', fontWeight: 700, color: '#fff' }}>Daily Security Briefing</p>
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginTop: '2px' }}>
+                    Generated by ExamSecure AI • {generatedAt?.toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', background: 'rgba(255,255,255,0.15)' }}>
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />
+                <span style={{ fontSize: '11px', color: '#fff', fontWeight: 600 }}>Live Data</span>
+              </div>
+            </div>
+
+            {/* Summary Content */}
+            <div style={{ padding: '28px' }}>
+              {formatSummary(summary)}
+            </div>
+          </div>
+
+          {/* Footer note */}
+          <div style={{ padding: '14px 20px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ShieldAlert size={16} style={{ color: '#6B7280', flexShrink: 0 }} />
+            <p style={{ fontSize: '12px', color: '#6B7280' }}>
+              This summary is generated from live system data using ExamSecure AI. Powered by Groq • Llama 3.1 8B • Role-restricted to Super Administrators only.
+            </p>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -243,6 +449,7 @@ export default function SuperAdminDashboard() {
     { label: 'Audit Logs', icon: <ClipboardList size={18} />, active: activeTab === 'audit', onClick: () => setActiveTab('audit') },
     { label: 'Downloads', icon: <FileDown size={18} />, active: activeTab === 'downloads', onClick: () => setActiveTab('downloads') },
     { label: 'Anomalies', icon: <AlertTriangle size={18} />, active: activeTab === 'anomalies', onClick: () => setActiveTab('anomalies') },
+    { label: 'AI Summary', icon: <Sparkles size={18} />, active: activeTab === 'summary', onClick: () => setActiveTab('summary') },
   ];
 
   return (
@@ -625,7 +832,12 @@ export default function SuperAdminDashboard() {
             )}
           </motion.div>
         )}
-
+        {/* ── AI Summary ────────────────────────────────────────── */}
+{activeTab === 'summary' && (
+  <motion.div key="summary" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+    <AIDailySummary />
+  </motion.div>
+)}
       </AnimatePresence>
     </Layout>
   );

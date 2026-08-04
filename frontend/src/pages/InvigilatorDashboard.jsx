@@ -272,6 +272,7 @@ export default function InvigilatorDashboard() {
     { label: 'My Papers', icon: <FileText size={18} />, active: activeTab === 'papers', onClick: () => setActiveTab('papers') },
     { label: 'My Downloads', icon: <Download size={18} />, active: activeTab === 'downloads', onClick: () => setActiveTab('downloads') },
     { label: 'Verify Document', icon: <Shield size={18} />, active: activeTab === 'verify', onClick: () => setActiveTab('verify') },
+    { label: "Today's Duties", icon: <CheckCircle2 size={18} />, active: activeTab === 'duties', onClick: () => setActiveTab('duties') },
   ];
 
   const PaperCard = ({ paper }) => {
@@ -758,7 +759,127 @@ export default function InvigilatorDashboard() {
             </div>
           </motion.div>
         )}
+      {/* ── Today's Duties ───────────────────────────────────── */}
+{activeTab === 'duties' && (
+  <motion.div key="duties" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+    <div style={{ marginBottom: '24px' }}>
+      <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Today's Duties</h2>
+      <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
+        {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+      </p>
+    </div>
 
+    {/* Summary Cards */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <StatCard icon={<CheckCircle2 size={20} />} label="Ready to Download" value={papers.filter(p => p.status === 'released' && !downloadedPapers.has(p.id)).length} bg="#DCFCE7" color="#16A34A" sublabel="Action required" />
+      <StatCard icon={<Download size={20} />} label="Already Downloaded" value={myDownloads.length} bg="#DBEAFE" color="#2563EB" sublabel="Completed" />
+      <StatCard icon={<Clock size={20} />} label="Releasing Today" value={papers.filter(p => p.releaseAt && !p.isReleased && new Date(p.releaseAt).toDateString() === new Date().toDateString()).length} bg="#FEF3C7" color="#D97706" sublabel="Coming up" />
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      {/* Action Required */}
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <AlertCircle size={16} style={{ color: '#EF4444' }} />
+          </div>
+          <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>Action Required</p>
+        </div>
+
+        {papers.filter(p => p.status === 'released' && !downloadedPapers.has(p.id)).length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '28px', color: '#9CA3AF' }}>
+            <CheckCircle2 size={32} style={{ margin: '0 auto 8px', color: '#22C55E' }} />
+            <p style={{ fontSize: '13px', fontWeight: 600, color: '#166534' }}>All done!</p>
+            <p style={{ fontSize: '12px', marginTop: '4px' }}>You've downloaded all available papers</p>
+          </div>
+        ) : (
+          papers.filter(p => p.status === 'released' && !downloadedPapers.has(p.id)).map((paper, i) => (
+            <motion.div key={paper.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', borderRadius: '12px', background: '#FEF2F2', border: '1px solid #FECACA', marginBottom: '8px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{paper.title}</p>
+                  <p style={{ fontSize: '11px', color: '#6B7280' }}>{paper.subject} — Download required</p>
+                </div>
+              </div>
+              <motion.button
+                onClick={() => handleDownload(paper.id, paper.subject, paper.title)}
+                whileHover={{ y: -2, boxShadow: '0 6px 16px rgba(37,99,235,0.3)' }}
+                whileTap={{ scale: 0.97 }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '10px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: 'linear-gradient(90deg, #2563EB, #4F46E5)', color: '#fff' }}
+              >
+                <Download size={13} /> Download
+              </motion.button>
+            </motion.div>
+          ))
+        )}
+      </Card>
+
+      {/* Completed + Upcoming */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Completed */}
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle2 size={16} style={{ color: '#16A34A' }} />
+            </div>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>Completed</p>
+          </div>
+          {papers.filter(p => downloadedPapers.has(p.id)).length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#9CA3AF', textAlign: 'center', padding: '16px' }}>No downloads yet today</p>
+          ) : (
+            papers.filter(p => downloadedPapers.has(p.id)).map((paper, i) => (
+              <div key={paper.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', borderBottom: i < papers.filter(p => downloadedPapers.has(p.id)).length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                <CheckCircle2 size={16} style={{ color: '#22C55E', flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{paper.title}</p>
+                  <p style={{ fontSize: '11px', color: '#6B7280' }}>{paper.subject}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </Card>
+
+        {/* Releasing Today */}
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Clock size={16} style={{ color: '#D97706' }} />
+            </div>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>Releasing Today</p>
+          </div>
+          {papers.filter(p => p.releaseAt && !p.isReleased && new Date(p.releaseAt).toDateString() === new Date().toDateString()).length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#9CA3AF', textAlign: 'center', padding: '16px' }}>No papers releasing today</p>
+          ) : (
+            papers.filter(p => p.releaseAt && !p.isReleased && new Date(p.releaseAt).toDateString() === new Date().toDateString()).map((paper, i) => (
+              <div key={paper.id} style={{ padding: '10px 12px', borderRadius: '10px', background: '#FFFBEB', border: '1px solid #FDE68A', marginBottom: '8px' }}>
+                <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{paper.title}</p>
+                <CountdownTimer releaseAt={paper.releaseAt} onReleased={fetchAssignedPapers} />
+              </div>
+            ))
+          )}
+        </Card>
+      </div>
+    </div>
+
+    {/* Daily briefing */}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+      style={{ marginTop: '20px', padding: '20px', borderRadius: '16px', background: 'linear-gradient(135deg, #1e3a8a, #2563EB)', color: '#fff' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <ShieldCheck size={24} style={{ color: '#93C5FD', flexShrink: 0 }} />
+        <div>
+          <p style={{ fontSize: '14px', fontWeight: 700 }}>Security Reminder</p>
+          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: '4px', lineHeight: 1.6 }}>
+            Every paper you download is watermarked with your identity. Do not share downloaded papers. Report any suspicious activity immediately.
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  </motion.div>
+)}
       </AnimatePresence>
     </Layout>
   );
