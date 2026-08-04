@@ -544,6 +544,33 @@ export default function AdminDashboard() {
             </Card>
           </motion.div>
         )}
+        {/* Operations Summary Card */}
+<Card style={{ marginTop: '20px' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Activity size={16} style={{ color: '#2563EB' }} />
+    </div>
+    <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>Today's Operations</p>
+  </div>
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
+    {[
+      { label: 'Total Papers', value: papers.length, color: '#2563EB', bg: '#DBEAFE' },
+      { label: 'Released', value: released, color: '#16A34A', bg: '#DCFCE7' },
+      { label: 'Scheduled', value: scheduled, color: '#D97706', bg: '#FEF3C7' },
+      { label: 'Downloads Today', value: todayDownloads, color: '#7C3AED', bg: '#EDE9FE' },
+      { label: 'Pending', value: pending, color: '#6B7280', bg: '#F3F4F6' },
+    ].map((item, i) => (
+      <motion.div
+        key={i}
+        whileHover={{ y: -3 }}
+        style={{ textAlign: 'center', padding: '16px 12px', borderRadius: '12px', background: item.bg }}
+      >
+        <p style={{ fontSize: '24px', fontWeight: 800, color: item.color }}>{item.value}</p>
+        <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>{item.label}</p>
+      </motion.div>
+    ))}
+  </div>
+</Card>
 
         {/* ── All Papers ────────────────────────────────────────── */}
         {activeTab === 'papers' && (

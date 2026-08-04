@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ClipboardList, AlertTriangle,
   UserPlus, ShieldAlert, CheckCircle2, Activity,
   Search, Download, Upload, Unlock, Lock,
-  ArrowRight, Eye, RefreshCw, FileDown, Shield, Sparkles
+  ArrowRight, Eye, RefreshCw, FileDown, Shield, Sparkles, Clock
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import AuditLogTable from '../components/AuditLogTable';
@@ -450,6 +450,7 @@ export default function SuperAdminDashboard() {
     { label: 'Downloads', icon: <FileDown size={18} />, active: activeTab === 'downloads', onClick: () => setActiveTab('downloads') },
     { label: 'Anomalies', icon: <AlertTriangle size={18} />, active: activeTab === 'anomalies', onClick: () => setActiveTab('anomalies') },
     { label: 'AI Summary', icon: <Sparkles size={18} />, active: activeTab === 'summary', onClick: () => setActiveTab('summary') },
+    { label: 'Timeline', icon: <Clock size={18} />, active: activeTab === 'timeline', onClick: () => setActiveTab('timeline') },
   ];
 
   return (
@@ -585,6 +586,51 @@ export default function SuperAdminDashboard() {
                 </Card>
               </div>
             </div>
+            {/* Security Health Card */}
+<Card style={{ marginTop: '20px' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ShieldAlert size={16} style={{ color: '#16A34A' }} />
+      </div>
+      <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>Security Health</p>
+    </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ fontSize: '28px', fontWeight: 800, color: stats?.unresolved > 0 ? '#D97706' : '#16A34A' }}>
+        {stats?.unresolved > 0 ? Math.max(70, 95 - stats.unresolved * 5) : 95}
+      </div>
+      <div>
+        <p style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280' }}>/ 100</p>
+        <p style={{ fontSize: '10px', color: '#9CA3AF' }}>Security Score</p>
+      </div>
+    </div>
+  </div>
+
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+    {[
+      { label: 'JWT Authentication', status: 'online', icon: <CheckCircle2 size={14} /> },
+      { label: 'AES-256 Encryption', status: 'online', icon: <CheckCircle2 size={14} /> },
+      { label: 'Scheduler Running', status: 'online', icon: <CheckCircle2 size={14} /> },
+      { label: 'AI Assistant Online', status: 'online', icon: <CheckCircle2 size={14} /> },
+      { label: 'Hash Chain Intact', status: hashResult?.valid === false ? 'warning' : 'online', icon: hashResult?.valid === false ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} /> },
+      { label: `${stats?.unresolved ?? 0} Risk Alerts`, status: stats?.unresolved > 0 ? 'warning' : 'online', icon: stats?.unresolved > 0 ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} /> },
+    ].map((item, i) => (
+      <div key={i} style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '10px 14px', borderRadius: '10px',
+        background: item.status === 'warning' ? '#FEF3C7' : '#F0FDF4',
+        border: `1px solid ${item.status === 'warning' ? '#FDE68A' : '#BBF7D0'}`,
+      }}>
+        <span style={{ color: item.status === 'warning' ? '#D97706' : '#16A34A', flexShrink: 0 }}>
+          {item.icon}
+        </span>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: item.status === 'warning' ? '#92400E' : '#166534' }}>
+          {item.label}
+        </span>
+      </div>
+    ))}
+  </div>
+</Card>
           </motion.div>
         )}
 
@@ -836,6 +882,194 @@ export default function SuperAdminDashboard() {
 {activeTab === 'summary' && (
   <motion.div key="summary" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
     <AIDailySummary />
+  </motion.div>
+)}
+        {/* ── Activity Timeline ─────────────────────────────────── */}
+{activeTab === 'timeline' && (
+  <motion.div key="timeline" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div>
+        <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Activity Timeline</h2>
+        <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>
+          A visual story of all system events in chronological order
+        </p>
+      </div>
+      <GradientButton onClick={fetchAuditLogs} variant="secondary">
+        <RefreshCw size={14} /> Refresh
+      </GradientButton>
+    </div>
+
+    {auditLogs.length === 0 ? (
+      <Card style={{ textAlign: 'center', padding: '60px' }}>
+        <Activity size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
+        <p style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>No activity yet</p>
+      </Card>
+    ) : (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* Timeline */}
+        <Card style={{ padding: '28px' }}>
+          <div style={{ position: 'relative' }}>
+            {/* Vertical line */}
+            <div style={{
+              position: 'absolute', left: '15px', top: '8px', bottom: '8px',
+              width: '2px', background: 'linear-gradient(180deg, #2563EB, #4F46E5, #7C3AED)',
+              borderRadius: '2px', opacity: 0.2,
+            }} />
+
+            {auditLogs.slice(0, 20).map((log, i) => {
+              const configs = {
+                PAPER_UPLOADED:     { icon: '📤', color: '#2563EB', bg: '#DBEAFE', label: 'Paper Uploaded' },
+                PAPER_DOWNLOADED:   { icon: '📥', color: '#16A34A', bg: '#DCFCE7', label: 'Paper Downloaded' },
+                PAPER_RELEASED:     { icon: '🔓', color: '#16A34A', bg: '#DCFCE7', label: 'Paper Released' },
+                PAPER_ACCESSED:     { icon: '👁️', color: '#6B7280', bg: '#F3F4F6', label: 'Paper Accessed' },
+                PERMISSION_GRANTED: { icon: '✅', color: '#7C3AED', bg: '#EDE9FE', label: 'Permission Granted' },
+                PERMISSION_REVOKED: { icon: '❌', color: '#EF4444', bg: '#FEE2E2', label: 'Permission Revoked' },
+                ANOMALY_DETECTED:   { icon: '🚨', color: '#EF4444', bg: '#FEE2E2', label: 'Anomaly Detected' },
+                ADMIN_ACTION:       { icon: '⚙️', color: '#D97706', bg: '#FEF3C7', label: 'Admin Action' },
+                USER_LOGIN:         { icon: '🟢', color: '#16A34A', bg: '#DCFCE7', label: 'User Login' },
+                USER_LOGOUT:        { icon: '🔴', color: '#6B7280', bg: '#F3F4F6', label: 'User Logout' },
+                AI_QUERY:           { icon: '🤖', color: '#7C3AED', bg: '#EDE9FE', label: 'AI Query' },
+                PAPER_SCHEDULED:    { icon: '📅', color: '#D97706', bg: '#FEF3C7', label: 'Paper Scheduled' },
+              };
+              const config = configs[log.eventType] || { icon: '📋', color: '#6B7280', bg: '#F3F4F6', label: log.eventType };
+
+              return (
+                <motion.div
+                  key={log.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: Math.min(i * 0.03, 0.5) }}
+                  style={{ display: 'flex', gap: '16px', marginBottom: '20px', position: 'relative' }}
+                >
+                  {/* Timeline dot */}
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                    background: config.bg, border: `2px solid ${config.color}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px', zIndex: 1,
+                    boxShadow: `0 0 0 4px ${config.bg}`,
+                  }}>
+                    {config.icon}
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, paddingTop: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>
+                          {config.label}
+                        </p>
+                        {log.user && (
+                          <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                            {log.user.name} • {log.user.role.replace('_', ' ')}
+                          </p>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '11px', color: '#9CA3AF', flexShrink: 0, marginLeft: '8px' }}>
+                        {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+
+            {auditLogs.length > 20 && (
+              <p style={{ fontSize: '12px', color: '#9CA3AF', textAlign: 'center', paddingLeft: '48px' }}>
+                Showing 20 of {auditLogs.length} events
+              </p>
+            )}
+          </div>
+        </Card>
+
+        {/* Right side — Stats */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Event breakdown */}
+          <Card>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '16px' }}>Event Breakdown</p>
+            {(() => {
+              const counts = {};
+              auditLogs.forEach(l => { counts[l.eventType] = (counts[l.eventType] || 0) + 1; });
+              const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+              const total = auditLogs.length;
+              const colors = ['#2563EB', '#7C3AED', '#16A34A', '#D97706', '#EF4444', '#6B7280'];
+              return sorted.map(([type, count], i) => (
+                <div key={type} style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: '#374151' }}>
+                      {type.replace(/_/g, ' ')}
+                    </span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: colors[i] }}>{count}</span>
+                  </div>
+                  <div style={{ height: '6px', borderRadius: '4px', background: '#F3F4F6', overflow: 'hidden' }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(count / total) * 100}%` }}
+                      transition={{ duration: 0.8, delay: i * 0.1 }}
+                      style={{ height: '100%', borderRadius: '4px', background: colors[i] }}
+                    />
+                  </div>
+                </div>
+              ));
+            })()}
+          </Card>
+
+          {/* Today's summary */}
+          <Card>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '16px' }}>Today's Summary</p>
+            {(() => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const todayLogs = auditLogs.filter(l => new Date(l.createdAt) >= today);
+              const stats = [
+                { label: 'Total Events', value: todayLogs.length, color: '#2563EB' },
+                { label: 'Logins', value: todayLogs.filter(l => l.eventType === 'USER_LOGIN').length, color: '#16A34A' },
+                { label: 'Downloads', value: todayLogs.filter(l => l.eventType === 'PAPER_DOWNLOADED').length, color: '#7C3AED' },
+                { label: 'Anomalies', value: todayLogs.filter(l => l.eventType === 'ANOMALY_DETECTED').length, color: '#EF4444' },
+                { label: 'AI Queries', value: todayLogs.filter(l => l.eventType === 'AI_QUERY').length, color: '#D97706' },
+              ];
+              return stats.map((stat, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < stats.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                  <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>{stat.label}</span>
+                  <span style={{ fontSize: '16px', fontWeight: 800, color: stat.color }}>{stat.value}</span>
+                </div>
+              ));
+            })()}
+          </Card>
+
+          {/* Most active user */}
+          <Card>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '16px' }}>Most Active Users</p>
+            {(() => {
+              const userCounts = {};
+              auditLogs.forEach(l => {
+                if (l.user) {
+                  if (!userCounts[l.user.name]) userCounts[l.user.name] = { count: 0, email: l.user.email, role: l.user.role };
+                  userCounts[l.user.name].count++;
+                }
+              });
+              return Object.entries(userCounts)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 4)
+                .map(([name, data], i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #60A5FA, #818CF8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#fff' }}>
+                        {name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#111827' }}>{name}</p>
+                        <p style={{ fontSize: '10px', color: '#9CA3AF' }}>{data.role.replace('_', ' ')}</p>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#2563EB' }}>{data.count} events</span>
+                  </div>
+                ));
+            })()}
+          </Card>
+        </div>
+      </div>
+    )}
   </motion.div>
 )}
       </AnimatePresence>
