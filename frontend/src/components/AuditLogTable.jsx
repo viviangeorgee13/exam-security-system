@@ -347,7 +347,7 @@ export default function AuditLogTable({ logs = [], onVerify, onRefresh, verifyLo
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <FileText size={12} style={{ color: '#6B7280', flexShrink: 0 }} />
                         <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', background: '#F3F4F6', padding: '2px 8px', borderRadius: '6px' }}>
-                          {log.paperId.slice(0, 8)}...
+                          {log.metadata?.paperTitle || log.paperId.slice(0, 8) + '...'}
                         </span>
                         <motion.button
                           onClick={() => handleCopy(log.paperId, log.id)}
