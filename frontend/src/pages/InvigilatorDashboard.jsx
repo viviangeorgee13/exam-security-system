@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -77,7 +77,12 @@ function OtpModal({ paper, onClose, onVerified }) {
     }
   };
 
-  useEffect(() => { sendOtp(); }, []);
+    const sentRef = useRef(false);
+  useEffect(() => {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    sendOtp();
+  }, []);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
