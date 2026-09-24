@@ -37,12 +37,15 @@ router.get('/verify', authenticate, isAdmin, async (req, res) => {
 // GET /api/audit/paper/:id — logs for a specific paper
 router.get('/paper/:id', authenticate, isAdmin, async (req, res) => {
   try {
-    const logs = await prisma.auditLog.findMany({
-      where: { paperId: req.params.id },
+const logs = await prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
+      take: 100,
       include: {
         user: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, role: true },
+        },
+        paper: {
+          select: { id: true, title: true, subject: true },
         },
       },
     });

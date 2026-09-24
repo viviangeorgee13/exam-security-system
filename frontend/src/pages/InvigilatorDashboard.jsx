@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import CountdownTimer from '../components/CountdownTimer';
-import { downloadPaper, getMyDownloads, verifyDownloadToken } from '../services/api';
+import { downloadPaper, getMyDownloads, verifyDownloadToken, requestDownloadOtp, verifyDownloadOtp, downloadPaperWithAuth } from '../services/api';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -53,7 +53,204 @@ const DOWNLOAD_STEPS = [
   'Embedding identity token...',
   'Authorizing download...',
 ];
+function OtpModal({ paper, onClose, onVerified }) {
+  const [otp, setOtp] = useState('');
+  const [sending, setSending] = useState(true);
+  const [verifying, setVerifying] = useState(false);
+  const [maskedInfo, setMaskedInfo] = useState('');
+  const [error, setError] = useState('');
+  const [secondsLeft, setSecondsLeft] = useState(300);
 
+  const sendOtp = async () => {
+    setSending(true);
+    setError('');
+    setOtp('');
+    try {
+      const res = await requestDownloadOtp(paper.id);
+      setMaskedInfo(res.data.message || 'OTP sent to your registered email address.');
+      setSecondsLeft(300);
+      toast.success('OTP sent to your registered email');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not send OTP. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  useEffect(() => { sendOtp(); }, []);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const t = setInterval(() => setSecondsLeft(s => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [secondsLeft]);
+
+  const handleVerify = async () => {
+    if (otp.length !== 6 || verifying) return;
+    setVerifying(true);
+    setError('');
+    try {
+      const res = await verifyDownloadOtp(paper.id, otp);
+      toast.success('OTP verified. Download starting...');
+      onVerified(res.data.downloadAuth);
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Verification failed. Please try again.';
+      setError(msg);
+      setOtp('');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
+  const ss = String(secondsLeft % 60).padStart(2, '0');
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, backdropFilter: 'blur(4px)',
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92 }}
+        style={{
+          background: '#fff', borderRadius: '24px', overflow: 'hidden',
+          width: '420px', boxShadow: '0 25px 80px rgba(0,0,0,0.2)',
+          border: '1px solid #E5E7EB',
+        }}
+      >
+        <div style={{ height: '4px', background: 'linear-gradient(90deg, #2563EB, #4F46E5)' }} />
+
+        <div style={{ padding: '32px 36px 28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '18px',
+              background: 'linear-gradient(135deg, #EFF6FF, #EDE9FE)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '1px solid #BFDBFE',
+            }}>
+              <ShieldCheck size={32} style={{ color: '#2563EB' }} />
+            </div>
+          </div>
+
+          <p style={{ fontSize: '19px', fontWeight: 800, color: '#111827', textAlign: 'center', marginBottom: '6px' }}>
+            OTP Verification
+          </p>
+          <p style={{ fontSize: '13px', color: '#6B7280', textAlign: 'center', marginBottom: '4px', lineHeight: 1.5 }}>
+            {sending ? 'Sending OTP to your registered email...' : maskedInfo || 'A 6-digit OTP has been sent to your registered email address.'}
+          </p>
+          <p style={{ fontSize: '12px', color: '#9CA3AF', textAlign: 'center', marginBottom: '24px' }}>
+            {paper.title}
+          </p>
+
+          <input
+            type="text"
+            inputMode="numeric"
+            value={otp}
+            autoFocus
+            maxLength={6}
+            onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+            onKeyDown={e => e.key === 'Enter' && handleVerify()}
+            placeholder="______"
+            disabled={sending}
+            style={{
+              width: '100%', height: '60px', borderRadius: '14px',
+              border: `1.5px solid ${error ? '#FCA5A5' : '#E5E7EB'}`,
+              background: error ? '#FEF2F2' : '#F9FAFB',
+              color: '#111827', fontSize: '28px', fontWeight: 700,
+              textAlign: 'center', letterSpacing: '12px',
+              outline: 'none', boxSizing: 'border-box',
+              fontFamily: 'monospace', transition: 'all 200ms ease',
+            }}
+            onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 4px rgba(37,99,235,0.10)'; e.target.style.background = '#fff'; }}
+            onBlur={e => { e.target.style.borderColor = error ? '#FCA5A5' : '#E5E7EB'; e.target.style.boxShadow = 'none'; e.target.style.background = error ? '#FEF2F2' : '#F9FAFB'; }}
+          />
+
+          {error && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px' }}>
+              <AlertCircle size={13} style={{ color: '#DC2626', flexShrink: 0 }} />
+              <p style={{ fontSize: '12px', color: '#DC2626', fontWeight: 500 }}>{error}</p>
+            </div>
+          )}
+
+          <p style={{ fontSize: '11px', color: secondsLeft > 0 ? '#9CA3AF' : '#DC2626', textAlign: 'center', marginTop: '10px' }}>
+            {secondsLeft > 0 ? `OTP expires in ${mm}:${ss}` : 'OTP expired — please resend'}
+          </p>
+
+          <motion.button
+            onClick={handleVerify}
+            disabled={otp.length !== 6 || verifying || sending}
+            whileHover={otp.length === 6 && !verifying ? { y: -2, boxShadow: '0 12px 28px rgba(37,99,235,0.32)' } : {}}
+            whileTap={otp.length === 6 && !verifying ? { scale: 0.98 } : {}}
+            style={{
+              width: '100%', height: '50px', marginTop: '20px',
+              borderRadius: '14px', border: 'none',
+              background: otp.length === 6 && !verifying
+                ? 'linear-gradient(90deg, #2563EB, #4F46E5)' : '#E5E7EB',
+              color: otp.length === 6 && !verifying ? '#fff' : '#9CA3AF',
+              fontSize: '14px', fontWeight: 600,
+              cursor: otp.length === 6 && !verifying ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              transition: 'all 200ms ease',
+            }}
+          >
+            {verifying ? (
+              <>
+                <div style={{ width: '15px', height: '15px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                Verifying...
+              </>
+            ) : (<><ShieldCheck size={16} /> Verify OTP</>)}
+          </motion.button>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+            <button
+              onClick={sendOtp}
+              disabled={sending || verifying}
+              style={{
+                flex: 1, height: '42px', borderRadius: '12px',
+                border: '1.5px solid #E5E7EB', background: '#fff',
+                color: sending ? '#9CA3AF' : '#374151',
+                fontSize: '13px', fontWeight: 600,
+                cursor: sending || verifying ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              }}
+            >
+              <RefreshCw size={14} /> Resend OTP
+            </button>
+            <button
+              onClick={onClose}
+              disabled={verifying}
+              style={{
+                flex: 1, height: '42px', borderRadius: '12px',
+                border: '1.5px solid #E5E7EB', background: '#fff',
+                color: '#6B7280', fontSize: '13px', fontWeight: 600,
+                cursor: verifying ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div style={{
+            marginTop: '20px', padding: '10px 14px', borderRadius: '12px',
+            background: '#F0FDF4', border: '1px solid #BBF7D0',
+            display: 'flex', alignItems: 'center', gap: '9px',
+          }}>
+            <ShieldCheck size={15} style={{ color: '#22C55E', flexShrink: 0 }} />
+            <p style={{ fontSize: '11px', color: '#166534', fontWeight: 500, lineHeight: 1.4 }}>
+              Download requires OTP verification. This attempt is recorded in the audit log.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 function DownloadProgressModal({ paperTitle }) {
   const [step, setStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -171,6 +368,7 @@ export default function InvigilatorDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [showProgress, setShowProgress] = useState(null);
+  const [otpPaper, setOtpPaper] = useState(null);
 
   // Verify Document state
   const [verifyToken, setVerifyToken] = useState('');
@@ -203,12 +401,21 @@ export default function InvigilatorDashboard() {
     fetchMyDownloads();
   }, []);
 
-  const handleDownload = async (paperId, subject, title) => {
+    // Step 1: clicking Download opens the OTP modal
+  const handleDownload = (paperId, subject, title) => {
+    if (downloading) return;
+    setOtpPaper({ id: paperId, subject, title });
+  };
+
+  // Step 2: runs only after the backend has verified the OTP
+  const startVerifiedDownload = async (downloadAuth) => {
+    const { id: paperId, subject, title } = otpPaper;
+    setOtpPaper(null);
     setDownloading(paperId);
     setShowProgress({ paperId, title });
     await new Promise(resolve => setTimeout(resolve, 3200));
     try {
-      const res = await downloadPaper(paperId);
+      const res = await downloadPaperWithAuth(paperId, downloadAuth);
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -369,6 +576,13 @@ export default function InvigilatorDashboard() {
 
       <AnimatePresence>
         {showProgress && <DownloadProgressModal paperTitle={showProgress.title} />}
+                {otpPaper && (
+          <OtpModal
+            paper={otpPaper}
+            onClose={() => setOtpPaper(null)}
+            onVerified={startVerifiedDownload}
+          />
+        )}
       </AnimatePresence>
 
       <AnimatePresence mode="wait">

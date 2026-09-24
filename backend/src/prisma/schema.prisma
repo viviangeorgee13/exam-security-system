@@ -125,3 +125,18 @@ model Anomaly {
 
   @@map("anomalies")
 }
+model DownloadOtp {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  paperId       String    @map("paper_id")
+  otpHash       String    @map("otp_hash")
+  attempts      Int       @default(0)
+  used          Boolean   @default(false)
+  downloadAuth  String?   @unique @map("download_auth")
+  authUsed      Boolean   @default(false) @map("auth_used")
+  expiresAt     DateTime  @map("expires_at")
+  authExpiresAt DateTime? @map("auth_expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("download_otps")
+}

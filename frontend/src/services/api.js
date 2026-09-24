@@ -69,3 +69,7 @@ export const getAnomalyStats = () => API.get('/anomalies/stats');
 export const getDownloads = () => API.get('/downloads');
 export const getMyDownloads = () => API.get('/downloads/my');
 export const verifyDownloadToken = (token) => API.get(`/downloads/verify/${token}`);
+// Download OTP
+export const requestDownloadOtp = (paperId) => API.post(`/papers/${paperId}/request-download-otp`);
+export const verifyDownloadOtp = (paperId, otp) => API.post(`/papers/${paperId}/verify-download-otp`, { otp });
+export const downloadPaperWithAuth = (paperId, auth) => API.get(`/papers/${paperId}/download?auth=${auth}`, { responseType: 'blob' });

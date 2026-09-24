@@ -68,5 +68,25 @@ async function sendAnomalyAlert(adminEmail, userName, paperTitle, riskScore, rea
   `;
   return sendEmail(adminEmail, subject, html);
 }
+async function sendDownloadOtp(email, name, paperTitle, otp) {
+  const subject = 'ExamSecure – Paper Download OTP';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #1a56db;">Paper Download Verification</h2>
+      <p>Hello ${name},</p>
+      <p>Your OTP for downloading the following examination paper is:</p>
+      <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 16px 0; text-align: center;">
+        <p style="font-size: 13px; color: #6b7280; margin: 0 0 8px 0;">${paperTitle}</p>
+        <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #111827; margin: 0;">${otp}</p>
+      </div>
+      <p>This OTP is valid for <strong>5 minutes</strong> and can be used only once.</p>
+      <p style="color: #b91c1c; font-size: 13px;">
+        If you did not request this download, please contact the system administrator immediately.
+      </p>
+      <p style="color: #6b7280; font-size: 12px;">Regards,<br/>ExamSecure</p>
+    </div>
+  `;
+  return sendEmail(email, subject, html);
+}
 
-module.exports = { sendEmail, sendPaperReleaseNotification, sendAnomalyAlert };
+module.exports = { sendEmail, sendPaperReleaseNotification, sendAnomalyAlert, sendDownloadOtp };
