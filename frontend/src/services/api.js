@@ -73,3 +73,6 @@ export const verifyDownloadToken = (token) => API.get(`/downloads/verify/${token
 export const requestDownloadOtp = (paperId) => API.post(`/papers/${paperId}/request-download-otp`);
 export const verifyDownloadOtp = (paperId, otp) => API.post(`/papers/${paperId}/verify-download-otp`, { otp });
 export const downloadPaperWithAuth = (paperId, auth) => API.get(`/papers/${paperId}/download?auth=${auth}`, { responseType: 'blob' });
+
+// Failed download attempts
+export const getFailedAttempts = () => API.get('/downloads/failed-attempts');

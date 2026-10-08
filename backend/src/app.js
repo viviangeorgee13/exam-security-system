@@ -29,6 +29,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const globalLimiter = rateLimit({
+  skip: () => process.env.RATE_LIMIT === 'off',
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Too many requests. Slow down.' },
@@ -36,6 +37,7 @@ const globalLimiter = rateLimit({
 app.use(globalLimiter);
 
 const authLimiter = rateLimit({
+  skip: () => process.env.RATE_LIMIT === 'off',
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Too many authentication attempts.' },

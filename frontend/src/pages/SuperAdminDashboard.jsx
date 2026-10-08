@@ -11,6 +11,7 @@ import Layout from '../components/Layout';
 import AuditLogTable from '../components/AuditLogTable';
 import AnomalyCard from '../components/AnomalyCard';
 import HashVerificationModal from '../components/HashVerificationModal';
+import FailedAttemptsPanel from '../components/FailedAttemptsPanel';
 import {
   getUsers, createUser, toggleUserActive,
   getAuditLogs, verifyHashChain,
@@ -449,6 +450,7 @@ export default function SuperAdminDashboard() {
     { label: 'Audit Logs', icon: <ClipboardList size={18} />, active: activeTab === 'audit', onClick: () => setActiveTab('audit') },
     { label: 'Downloads', icon: <FileDown size={18} />, active: activeTab === 'downloads', onClick: () => setActiveTab('downloads') },
     { label: 'Anomalies', icon: <AlertTriangle size={18} />, active: activeTab === 'anomalies', onClick: () => setActiveTab('anomalies') },
+    { label: 'Failed Attempts', icon: <Lock size={18} />, active: activeTab === 'failed', onClick: () => setActiveTab('failed') },
     { label: 'AI Summary', icon: <Sparkles size={18} />, active: activeTab === 'summary', onClick: () => setActiveTab('summary') },
     { label: 'Timeline', icon: <Clock size={18} />, active: activeTab === 'timeline', onClick: () => setActiveTab('timeline') },
   ];
@@ -884,6 +886,13 @@ export default function SuperAdminDashboard() {
     <AIDailySummary />
   </motion.div>
 )}
+        {/* -- Failed Attempts ------------------------------------------ */}
+        {activeTab === 'failed' && (
+          <motion.div key="failed" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <FailedAttemptsPanel />
+          </motion.div>
+        )}
+
         {/* ── Activity Timeline ─────────────────────────────────── */}
 {activeTab === 'timeline' && (
   <motion.div key="timeline" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>

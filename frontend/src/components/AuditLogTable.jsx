@@ -20,6 +20,12 @@ const EVENT_CONFIG = {
   ANOMALY_DETECTED:    { label: 'Anomaly Detected',   bg: '#FEE2E2', color: '#DC2626', icon: <AlertTriangle size={12} /> },
   ADMIN_ACTION:        { label: 'Admin Action',       bg: '#FEF3C7', color: '#D97706', icon: <ShieldCheck size={12} /> },
   TOKEN_REFRESHED:     { label: 'Token Refreshed',    bg: '#F3F4F6', color: '#6B7280', icon: <Activity size={12} /> },
+  DOWNLOAD_BLOCKED:                  { label: 'Download Blocked', bg: '#FEE2E2', color: '#DC2626', icon: <Lock size={12} /> },
+  DOWNLOAD_OTP_REQUESTED:            { label: 'OTP Requested',    bg: '#DBEAFE', color: '#2563EB', icon: <Shield size={12} /> },
+  DOWNLOAD_OTP_VERIFICATION_SUCCESS: { label: 'OTP Verified',     bg: '#DCFCE7', color: '#16A34A', icon: <ShieldCheck size={12} /> },
+  DOWNLOAD_OTP_VERIFICATION_FAILED:  { label: 'OTP Failed',       bg: '#FEE2E2', color: '#DC2626', icon: <AlertTriangle size={12} /> },
+  DOWNLOAD_OTP_EXPIRED:              { label: 'OTP Expired',      bg: '#FEF3C7', color: '#D97706', icon: <AlertTriangle size={12} /> },
+  AI_QUERY:                          { label: 'AI Query',         bg: '#EDE9FE', color: '#7C3AED', icon: <Activity size={12} /> },
 };
 
 const FILTER_TABS = [
