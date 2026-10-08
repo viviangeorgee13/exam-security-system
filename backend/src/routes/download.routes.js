@@ -7,6 +7,7 @@ const { requireRole } = require('../middleware/role.middleware');
 const { watermarkPDF } = require('../services/watermark.service');
 const { runAnomalyCheck } = require('../services/anomaly.service');
 const { sendDownloadOtp } = require('../services/email.service');
+const { recordFailedAttempt } = require('../services/failedAttempt.service');
 
 const OTP_TTL_MS = 5 * 60 * 1000;      // OTP valid 5 minutes
 const AUTH_TTL_MS = 2 * 60 * 1000;     // Download authorisation valid 2 minutes
@@ -14,8 +15,9 @@ const MAX_ATTEMPTS = 5;
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
 
-// Shared guard: paper exists, invigilator has permission, paper is released
-async function checkDownloadEligibility(paperId, userId, req) {
+// Shared guard: paper exists, invigilator has permission, paper is released.
+// Every refusal is recorded as a failed download attempt.
+async function checkDownloadEligibility(paperId, userId, req, stage) {
   const paper = await prisma.paper.findFirst({ where: { id: paperId, isDeleted: false } });
   if (!paper) return { error: { status: 404, body: { error: 'Paper not found' } } };
 
@@ -23,15 +25,17 @@ async function checkDownloadEligibility(paperId, userId, req) {
     where: { paperId, userId, isActive: true },
   });
   if (!permission) {
-    await logAuditEvent('PAPER_ACCESSED', userId, paperId, {
-      action: 'DOWNLOAD_DENIED', reason: 'No permission assigned', ip: req.ip,
+    await recordFailedAttempt({
+      userId, paperId, reason: 'No permission assigned', req,
+      extra: { stage, paperTitle: paper.title },
     });
     return { error: { status: 403, body: { error: 'You do not have permission to access this paper' } } };
   }
 
   if (!paper.isReleased) {
-    await logAuditEvent('PAPER_ACCESSED', userId, paperId, {
-      action: 'DOWNLOAD_DENIED', reason: 'Paper not yet released', releaseAt: paper.releaseAt, ip: req.ip,
+    await recordFailedAttempt({
+      userId, paperId, reason: 'Paper not yet released', req,
+      extra: { stage, paperTitle: paper.title, releaseAt: paper.releaseAt },
     });
     return { error: { status: 403, body: { error: 'Paper is not yet available. Please wait for the scheduled release time.', releaseAt: paper.releaseAt } } };
   }
@@ -39,12 +43,12 @@ async function checkDownloadEligibility(paperId, userId, req) {
   return { paper };
 }
 
-// ─── POST /api/papers/:id/request-download-otp ────────────────────────────────
+// --- POST /api/papers/:id/request-download-otp --------------------------------
 router.post('/:id/request-download-otp', authenticate, requireRole('invigilator'), async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
   try {
-    const { error, paper } = await checkDownloadEligibility(id, userId, req);
+    const { error, paper } = await checkDownloadEligibility(id, userId, req, 'otp_request');
     if (error) return res.status(error.status).json(error.body);
 
     // Invalidate any previous unused OTPs for this user + paper
@@ -80,8 +84,7 @@ router.post('/:id/request-download-otp', authenticate, requireRole('invigilator'
       return res.status(500).json({ error: 'Could not send OTP email. Please try again.' });
     }
 
-    // Masked hint only — never the OTP itself
-    const masked = user.email.replace(/^(.{2}).*(@.*)$/, '$1••••$2');
+    const masked = user.email.replace(/^(.{2}).*(@.*)$/, '$1****$2');
     res.json({ success: true, message: `OTP sent to your registered email address (${masked}).` });
   } catch (err) {
     console.error('[OTP] Request error:', err.message);
@@ -89,7 +92,7 @@ router.post('/:id/request-download-otp', authenticate, requireRole('invigilator'
   }
 });
 
-// ─── POST /api/papers/:id/verify-download-otp ─────────────────────────────────
+// --- POST /api/papers/:id/verify-download-otp ---------------------------------
 router.post('/:id/verify-download-otp', authenticate, requireRole('invigilator'), async (req, res) => {
   const { id } = req.params;
   const { otp } = req.body;
@@ -99,8 +102,14 @@ router.post('/:id/verify-download-otp', authenticate, requireRole('invigilator')
       return res.status(400).json({ error: 'Please enter the 6-digit OTP.' });
     }
 
-    const { error } = await checkDownloadEligibility(id, userId, req);
+    const { error, paper } = await checkDownloadEligibility(id, userId, req, 'otp_verify');
     if (error) return res.status(error.status).json(error.body);
+
+    const otpFailure = (reason, extra = {}) => recordFailedAttempt({
+      userId, paperId: id, reason, req,
+      eventType: 'DOWNLOAD_OTP_VERIFICATION_FAILED',
+      extra: { paperTitle: paper.title, ...extra },
+    });
 
     const record = await prisma.downloadOtp.findFirst({
       where: { userId, paperId: id, used: false },
@@ -108,19 +117,23 @@ router.post('/:id/verify-download-otp', authenticate, requireRole('invigilator')
     });
 
     if (!record) {
-      await logAuditEvent('DOWNLOAD_OTP_VERIFICATION_FAILED', userId, id, { reason: 'No active OTP', ip: req.ip });
+      await otpFailure('No active OTP');
       return res.status(400).json({ error: 'No active OTP. Please request a new OTP.' });
     }
 
     if (record.expiresAt < new Date()) {
       await prisma.downloadOtp.update({ where: { id: record.id }, data: { used: true } });
-      await logAuditEvent('DOWNLOAD_OTP_EXPIRED', userId, id, { ip: req.ip });
+      await recordFailedAttempt({
+        userId, paperId: id, reason: 'OTP expired', req,
+        eventType: 'DOWNLOAD_OTP_EXPIRED',
+        extra: { paperTitle: paper.title },
+      });
       return res.status(400).json({ error: 'OTP expired. Please request a new OTP.', code: 'OTP_EXPIRED' });
     }
 
     if (record.attempts >= MAX_ATTEMPTS) {
       await prisma.downloadOtp.update({ where: { id: record.id }, data: { used: true } });
-      await logAuditEvent('DOWNLOAD_OTP_VERIFICATION_FAILED', userId, id, { reason: 'Too many attempts', ip: req.ip });
+      await otpFailure('Too many incorrect attempts');
       return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new OTP.' });
     }
 
@@ -129,15 +142,13 @@ router.post('/:id/verify-download-otp', authenticate, requireRole('invigilator')
         where: { id: record.id },
         data: { attempts: { increment: 1 } },
       });
-      await logAuditEvent('DOWNLOAD_OTP_VERIFICATION_FAILED', userId, id, {
-        reason: 'Incorrect OTP', attempt: updated.attempts, ip: req.ip,
-      });
+      await otpFailure('Incorrect OTP', { attempt: updated.attempts });
       return res.status(400).json({
         error: `Invalid OTP. ${MAX_ATTEMPTS - updated.attempts} attempt(s) remaining.`,
       });
     }
 
-    // Correct — consume OTP and issue a short-lived one-time download authorisation
+    // Correct - consume OTP and issue a short-lived one-time download authorisation
     const downloadAuth = crypto.randomUUID();
     await prisma.downloadOtp.update({
       where: { id: record.id },
@@ -149,7 +160,10 @@ router.post('/:id/verify-download-otp', authenticate, requireRole('invigilator')
       },
     });
 
-    await logAuditEvent('DOWNLOAD_OTP_VERIFICATION_SUCCESS', userId, id, { ip: req.ip });
+    await logAuditEvent('DOWNLOAD_OTP_VERIFICATION_SUCCESS', userId, id, {
+      paperTitle: paper.title,
+      ip: req.ip,
+    });
 
     res.json({ success: true, downloadAuth });
   } catch (err) {
@@ -158,43 +172,22 @@ router.post('/:id/verify-download-otp', authenticate, requireRole('invigilator')
   }
 });
 
-// ─── GET /api/papers/:id/download — now requires a valid OTP authorisation ────
+// --- GET /api/papers/:id/download - requires a valid OTP authorisation --------
 router.get('/:id/download', authenticate, requireRole('invigilator'), async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
   try {
-    // 1. Fetch the paper
-    const paper = await prisma.paper.findFirst({ where: { id, isDeleted: false } });
-    if (!paper) return res.status(404).json({ error: 'Paper not found' });
+    // 1-3. Paper exists, permission granted, paper released
+    const { error, paper } = await checkDownloadEligibility(id, userId, req, 'download');
+    if (error) return res.status(error.status).json(error.body);
 
-    // 2. Permission check
-    const permission = await prisma.paperPermission.findFirst({
-      where: { paperId: id, userId, isActive: true },
-    });
-    if (!permission) {
-      await logAuditEvent('PAPER_ACCESSED', userId, id, {
-        action: 'DOWNLOAD_DENIED', reason: 'No permission assigned', ip: req.ip,
-      });
-      return res.status(403).json({ error: 'You do not have permission to access this paper' });
-    }
-
-    // 3. Release check
-    if (!paper.isReleased) {
-      await logAuditEvent('PAPER_ACCESSED', userId, id, {
-        action: 'DOWNLOAD_DENIED', reason: 'Paper not yet released', releaseAt: paper.releaseAt, ip: req.ip,
-      });
-      return res.status(403).json({
-        error: 'Paper is not yet available. Please wait for the scheduled release time.',
-        releaseAt: paper.releaseAt,
-      });
-    }
-
-    // 3b. OTP authorisation check — no valid OTP, no download
+    // 3b. OTP authorisation - no valid OTP, no download
     const auth = req.query.auth;
     if (!auth) {
-      await logAuditEvent('PAPER_ACCESSED', userId, id, {
-        action: 'DOWNLOAD_DENIED', reason: 'OTP verification required', ip: req.ip,
+      await recordFailedAttempt({
+        userId, paperId: id, reason: 'OTP verification required', req,
+        extra: { stage: 'download', paperTitle: paper.title },
       });
       return res.status(403).json({ error: 'OTP verification required before download.', code: 'OTP_REQUIRED' });
     }
@@ -203,13 +196,14 @@ router.get('/:id/download', authenticate, requireRole('invigilator'), async (req
       where: { downloadAuth: String(auth), userId, paperId: id, authUsed: false },
     });
     if (!authRecord || !authRecord.authExpiresAt || authRecord.authExpiresAt < new Date()) {
-      await logAuditEvent('PAPER_ACCESSED', userId, id, {
-        action: 'DOWNLOAD_DENIED', reason: 'Invalid or expired download authorisation', ip: req.ip,
+      await recordFailedAttempt({
+        userId, paperId: id, reason: 'Invalid or expired download authorisation', req,
+        extra: { stage: 'download', paperTitle: paper.title },
       });
       return res.status(403).json({ error: 'Download authorisation invalid or expired. Please verify OTP again.', code: 'OTP_REQUIRED' });
     }
 
-    // Consume the authorisation immediately — single use
+    // Consume the authorisation immediately - single use
     await prisma.downloadOtp.update({ where: { id: authRecord.id }, data: { authUsed: true } });
 
     // 4. Fetch invigilator details for watermark

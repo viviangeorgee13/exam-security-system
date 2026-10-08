@@ -51,7 +51,7 @@ const logs = await prisma.auditLog.findMany({
     });
     res.json(logs);
   } catch (err) {
-    console.error('[AUDIT] Paper logs error:', err.message);
+    console.error('[AUDIT] Paper logs error:', err.message); 
     res.status(500).json({ error: 'Failed to fetch paper audit logs' });
   }
 });
