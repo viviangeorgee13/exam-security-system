@@ -283,6 +283,7 @@ export default function AdminDashboard() {
   const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadForm, setUploadForm] = useState({ title: '', subject: '', examDate: '', releaseAt: '', file: null });
+  const [uploadInvigilators, setUploadInvigilators] = useState([]);
   const [scheduleForm, setScheduleForm] = useState({ paperId: '', releaseAt: '' });
 
   const fetchPapers = useCallback(async () => {
@@ -351,8 +352,25 @@ export default function AdminDashboard() {
       formData.append('examDate', uploadForm.examDate);
       if (uploadForm.releaseAt) formData.append('releaseAt', uploadForm.releaseAt);
       formData.append('file', uploadForm.file);
-      await uploadPaper(formData);
+      const uploadRes = await uploadPaper(formData);
       toast.success('Paper uploaded and encrypted successfully!');
+
+      // One grant at a time, so audit entries are written in order and the hash chain stays intact
+      const newPaperId = uploadRes.data?.paper?.id;
+      if (newPaperId && uploadInvigilators.length > 0) {
+        let granted = 0;
+        for (const invId of uploadInvigilators) {
+          try {
+            await grantPermission(newPaperId, invId);
+            granted += 1;
+          } catch (grantErr) {
+            console.error('Grant failed for', invId, grantErr);
+          }
+        }
+        if (granted === uploadInvigilators.length) toast.success(`Access granted to ${granted} invigilator(s)`);
+        else toast.error(`Access granted to ${granted} of ${uploadInvigilators.length} invigilators - check the Permissions tab`);
+      }
+      setUploadInvigilators([]);
       setUploadForm({ title: '', subject: '', examDate: '', releaseAt: '', file: null });
       fetchPapers();
       fetchAuditLogs();
@@ -681,6 +699,32 @@ export default function AdminDashboard() {
                     </label>
                     <input type="datetime-local" value={uploadForm.releaseAt} onChange={e => setUploadForm({ ...uploadForm, releaseAt: e.target.value })} style={inputStyle} onFocus={focusInput} onBlur={blurInput} />
                   </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '6px' }}>
+                    Assign Invigilators <span style={{ color: '#9CA3AF', fontWeight: 400 }}>(optional, {uploadInvigilators.length} selected)</span>
+                  </label>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1.5px solid #E5E7EB', borderRadius: '10px', background: '#F9FAFB' }}>
+                    {invigilators.length === 0 ? (
+                      <p style={{ fontSize: '12px', color: '#9CA3AF', padding: '12px' }}>No invigilators found</p>
+                    ) : invigilators.map(inv => {
+                      const checked = uploadInvigilators.includes(inv.id);
+                      return (
+                        <label key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #F3F4F6', background: checked ? '#EFF6FF' : 'transparent' }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setUploadInvigilators(prev => (checked ? prev.filter(id => id !== inv.id) : [...prev, inv.id]))}
+                          />
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>{inv.name}</span>
+                          <span style={{ fontSize: '11px', color: '#9CA3AF', marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.email}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                    Selected invigilators get access as soon as the paper is uploaded. You can change this later under Permissions.
+                  </p>
+                </div>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '6px' }}>PDF File</label>
                     <input type="file" accept=".pdf" onChange={e => setUploadForm({ ...uploadForm, file: e.target.files[0] })} required style={{ fontSize: '13px', color: '#374151', width: '100%' }} />

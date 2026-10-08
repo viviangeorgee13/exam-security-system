@@ -3,6 +3,9 @@ const router = express.Router();
 const { prisma, logAuditEvent } = require('../services/audit.service');
 const { authenticate } = require('../middleware/auth.middleware');
 
+// Model comes from .env so a retired model is a one-line change
+const AI_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+
 // ─── In-Memory Cache (30 second TTL) ─────────────────────────────────────────
 
 const cache = new Map();
@@ -358,6 +361,7 @@ Response Format:
 
 Rules:
 - Never write long paragraphs.
+- Never use markdown tables or # headings; use bold labels and bullet points only.
 - If there are no issues, explicitly state: "No issues detected."
 - If data is empty, state: "No records found."
 - Never invent, estimate, or assume information not in the data.
@@ -512,8 +516,9 @@ router.post('/query', authenticate, async (req, res) => {
         'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        max_tokens: 1024,
+        model: AI_MODEL,
+        max_tokens: 2048,
+        ...(AI_MODEL.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -530,13 +535,15 @@ router.post('/query', authenticate, async (req, res) => {
         status: 'failed',
         role: user.role,
         authorized,
-        model: 'llama-3.1-8b-instant',
+        model: AI_MODEL,
       });
       return res.status(500).json({ error: 'AI service unavailable. Please try again.' });
     }
 
     const data = await response.json();
-    const answer = data.choices?.[0]?.message?.content || 'I could not generate a response. Please try again.';
+    const rawAnswer = data.choices?.[0]?.message?.content || '';
+    // Some models wrap private reasoning in <think> tags - strip it so only the answer is shown
+    const answer = rawAnswer.replace(/<think>[\s\S]*?<\/think>/g, '').trim() || 'I could not generate a response. Please try again.';
     // Log to audit trail
     await logAuditEvent('AI_QUERY', user.id, null, {
       question: question.slice(0, 200),
@@ -544,11 +551,11 @@ router.post('/query', authenticate, async (req, res) => {
       status: 'success',
       role: user.role,
       authorized,
-      model: 'claude-haiku-4-5-20251001',
+      model: AI_MODEL,
       responseTimeMs: Date.now() - startTime,
     });
 
-    res.json({ answer, intent, model: 'Llama 3.1 8B' });
+    res.json({ answer, intent, model: AI_MODEL });
   } catch (err) {
     console.error('[AI] Error:', err.message);
     res.status(500).json({ error: 'AI service error. Please try again.' });

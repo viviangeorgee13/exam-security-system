@@ -338,7 +338,7 @@ function AIDailySummary() {
           <div style={{ padding: '14px 20px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <ShieldAlert size={16} style={{ color: '#6B7280', flexShrink: 0 }} />
             <p style={{ fontSize: '12px', color: '#6B7280' }}>
-              This summary is generated from live system data using ExamSecure AI. Powered by Groq • Llama 3.1 8B • Role-restricted to Super Administrators only.
+              This summary is generated from live system data using ExamSecure AI. Powered by Groq • GPT-OSS 20B • Role-restricted to Super Administrators only.
             </p>
           </div>
         </motion.div>
