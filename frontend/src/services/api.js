@@ -76,3 +76,6 @@ export const downloadPaperWithAuth = (paperId, auth) => API.get(`/papers/${paper
 
 // Failed download attempts
 export const getFailedAttempts = () => API.get('/downloads/failed-attempts');
+
+// Bulk paper upload
+export const bulkUploadPapers = (formData, config = {}) => API.post('/papers/bulk-upload', formData, config);

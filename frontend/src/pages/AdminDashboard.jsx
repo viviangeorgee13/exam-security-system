@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import CountdownTimer from '../components/CountdownTimer';
+import BulkUploadPanel from '../components/BulkUploadPanel';
 import {
   getPapers, uploadPaper, deletePaper, schedulePaper,
   getPermissions, grantPermission, revokePermission,
@@ -417,6 +418,7 @@ export default function AdminDashboard() {
     { label: 'Dashboard', icon: <LayoutDashboard size={18} />, active: activeTab === 'dashboard', onClick: () => setActiveTab('dashboard') },
     { label: 'All Papers', icon: <FileText size={18} />, active: activeTab === 'papers', onClick: () => setActiveTab('papers') },
     { label: 'Upload Paper', icon: <Upload size={18} />, active: activeTab === 'upload', onClick: () => setActiveTab('upload') },
+    { label: 'Bulk Upload', icon: <FolderOpen size={18} />, active: activeTab === 'bulk', onClick: () => setActiveTab('bulk') },
     { label: 'Schedule', icon: <Calendar size={18} />, active: activeTab === 'schedule', onClick: () => setActiveTab('schedule') },
     { label: 'Permissions', icon: <Users size={18} />, active: activeTab === 'permissions', onClick: () => setActiveTab('permissions') },
     { label: 'Paper Lifecycle', icon: <Activity size={18} />, active: activeTab === 'lifecycle', onClick: () => setActiveTab('lifecycle') },
@@ -884,6 +886,13 @@ export default function AdminDashboard() {
                 </Card>
               )}
             </div>
+          </motion.div>
+        )}
+
+        {/* -- Bulk Upload ---------------------------------------------- */}
+        {activeTab === 'bulk' && (
+          <motion.div key="bulk" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <BulkUploadPanel onUploaded={() => { fetchPapers(); fetchAuditLogs(); }} />
           </motion.div>
         )}
 
